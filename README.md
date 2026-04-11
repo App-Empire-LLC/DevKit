@@ -114,6 +114,20 @@ devkit bootstrap App-Empire-LLC/AuthService#5 --dry-run --no-ack
 
 When `devkit bootstrap` succeeds, it prints a `cd ... && claude` command. Running it starts a fresh Claude Code session inside the per-issue worktree — that's where Spec-Kit (`/speckit.specify`, `/speckit.plan`, etc.) should run for this issue's implementation work.
 
+### Claude context in per-issue worktrees (current quirk)
+
+Claude Code loads `CLAUDE.md` by walking **ancestors** of the cwd up to `$HOME` at session start (eager), and **lazy-loads** subdirectory `CLAUDE.md` files only when a tool first reads a file inside that subdir. See [appire_docs/tools/claude-code.md](../appire_docs/tools/claude-code.md) for the full behavior.
+
+Because DevKit places per-issue worktrees at `$APP_EMPIRE_WORKTREES_HOME/...`, which sits **outside** `$APP_EMPIRE_PROJECTS`, the ancestor walk from a worktree session never reaches `$APP_EMPIRE_PROJECTS/CLAUDE.md`. The meta-root context is not loaded at session start.
+
+**Workaround until [#2](https://github.com/App-Empire-LLC/DevKit/issues/2) lands:** launch Claude from the project subdirectory inside the worktree rather than the worktree root. That at least picks up the project's own `CLAUDE.md` eagerly via the ancestor walk:
+
+```bash
+cd $APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/<repo> && claude
+```
+
+This does not restore the AppEmpire meta-root CLAUDE.md — that's what #2 fixes, by seeding a root CLAUDE.md at the worktree top so the ancestor walk can find it.
+
 ## License
 
 See [LICENSE](LICENSE).
