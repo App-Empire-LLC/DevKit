@@ -131,6 +131,9 @@ Affected repos are determined by, in priority order:
   2. '## Affected Repos' section in the issue body (bulleted list of owner/repo)
   3. The issue's home repo (always included unless it's a draft)
 
+appire_docs is always included automatically (required for SpecKit).
+Duplicates are suppressed if appire_docs is already in the set.
+
 Error codes:
   2  — usage error
   10 — no affected repos could be determined (draft issue, no list)
@@ -230,6 +233,13 @@ cmd_bootstrap() {
             log "adding issue's home repo to set: $issue_home"
         fi
         repo_set_str="$(printf '%s\n%s\n' "$issue_home" "$repo_set_str" | sed '/^$/d')"
+    fi
+
+    # Always include appire_docs (SpecKit lives there)
+    local appire_docs_repo="$owner/appire_docs"
+    if ! printf '%s\n' "$repo_set_str" | grep -qxF "$appire_docs_repo"; then
+        log "adding appire_docs to set (required for SpecKit)"
+        repo_set_str="$(printf '%s\n%s\n' "$repo_set_str" "$appire_docs_repo" | sed '/^$/d')"
     fi
 
     if [ -z "$repo_set_str" ]; then
