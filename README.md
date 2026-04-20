@@ -3,7 +3,7 @@
 Companion tooling for [GitHub Spec-Kit](https://github.com/github/spec-kit).
 Per-issue git worktrees, Claude Code slash commands, and workflow helpers built on `gh` and `git worktree`.
 
-**Status:** v0.1 — internal use. Not yet published; expect rough edges.
+**Status:** v0.2 — Python port (Typer + Rich). Internal use. Not yet on PyPI (tracked in #23); install via `uv tool install --from .` from a local checkout.
 
 ## What it does
 
@@ -18,7 +18,9 @@ The per-issue directory is the canonical place to run `claude` for an implementa
 
 ## Requirements
 
-- `bash`, `git`, `gh`, `jq`
+- `uv` (`brew install uv` or https://github.com/astral-sh/uv)
+- Python 3.11+ (`uv` will provision this as needed)
+- `bash`, `git`, `gh`, `jq` on PATH
 - `gh auth login` completed
 - `~/.local/bin` on `$PATH`
 - Two environment variables:
@@ -27,18 +29,33 @@ The per-issue directory is the canonical place to run `claude` for an implementa
 
 ## Install
 
+Two distinct steps — system install and user setup:
+
+### 1. System install (one-time per machine)
+
 ```bash
 git clone git@github.com:App-Empire-LLC/DevKit.git
 cd DevKit
-./bin/devkit install
+uv tool install --from . aidevkit
 ```
 
-`devkit install` runs `devkit doctor` first, then symlinks:
+`uv tool install` places `devkit` on your PATH via its own shim at `~/.local/bin/devkit`. Once #23 publishes to PyPI, `uv tool install aidevkit` (without `--from .`) will work from anywhere.
 
-- `bin/devkit` → `~/.local/bin/devkit`
-- `.claude/commands/devkit.*.md` → `~/.claude/commands/`
+If you had the bash-era install, remove its symlink after uv installs the Python version:
 
-After install, `devkit` is callable from anywhere and the `/devkit.bootstrap` slash command is available inside Claude Code.
+```bash
+# Only if this points at the DevKit git checkout (not uv's shim):
+rm -f ~/.local/bin/devkit
+uv tool install --reinstall --from . aidevkit
+```
+
+### 2. User setup (one-time per user)
+
+```bash
+devkit setup
+```
+
+Runs `devkit doctor` first, then symlinks `~/.claude/commands/devkit.*.md` → the slash-command files bundled inside the uv-installed package. After `devkit setup`, the `/devkit.bootstrap` slash command is available inside Claude Code in any project. Re-run `devkit setup` after any `uv tool upgrade` to refresh symlinks.
 
 ## Subcommands
 
@@ -46,9 +63,9 @@ After install, `devkit` is callable from anywhere and the `/devkit.bootstrap` sl
 | ----------------------------------- | ------------------------------------------------------- |
 | `devkit bootstrap <owner/repo#N>`   | create a per-issue worktree directory                   |
 | `devkit doctor`                     | check dependencies and environment                      |
-| `devkit install`                    | run doctor, then symlink devkit + slash commands        |
+| `devkit setup`                      | link slash commands into `~/.claude/commands/` (runs doctor first) |
 | `devkit version`                    | show version                                            |
-| `devkit help`                       | show top-level help                                     |
+| `devkit --help`                     | show top-level help (Typer auto-generated)              |
 
 ## `devkit bootstrap`
 
