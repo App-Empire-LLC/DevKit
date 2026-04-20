@@ -69,26 +69,33 @@ def _resolve_affected_repos(
     body: str,
     repos_override: str,
 ) -> list[str]:
+    owner = issue_home.split("/", 1)[0]
+    appire_docs_repo = f"{owner}/appire_docs"
+
     if repos_override:
         log("using --repos override")
-        overrides = [r.strip() for r in repos_override.split(",") if r.strip()]
-        if issue_home not in overrides:
+        repos = [r.strip() for r in repos_override.split(",") if r.strip()]
+        if issue_home not in repos:
             log(f"adding issue's home repo to set: {issue_home}")
-            overrides = [issue_home, *overrides]
-        return overrides
+            repos = [issue_home, *repos]
+    else:
+        from_body = _parse_affected_repos_from_body(body)
+        if issue_home not in from_body:
+            if from_body:
+                log(f"adding issue's home repo to set: {issue_home}")
+            from_body = [issue_home, *from_body]
+        repos = from_body
 
-    from_body = _parse_affected_repos_from_body(body)
-    if issue_home not in from_body:
-        if from_body:
-            log(f"adding issue's home repo to set: {issue_home}")
-        from_body = [issue_home, *from_body]
+    if appire_docs_repo not in repos:
+        log("adding appire_docs to set (required for SpecKit)")
+        repos.append(appire_docs_repo)
 
-    if not from_body:
+    if not repos:
         die(
             "no affected repos could be determined. Add a '## Affected Repos' section to the issue body, or re-run with --repos owner/a,owner/b",
             code=E_REPOS_MISSING,
         )
-    return from_body
+    return repos
 
 
 def _verify_source_repos(repos: list[str], projects_dir: Path) -> None:
