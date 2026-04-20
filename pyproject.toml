@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aidevkit"
+version = "0.2.0"
+description = "Companion tooling for GitHub Spec-Kit — per-issue git worktrees, Claude Code slash commands, and workflow helpers."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+]
+
+[project.scripts]
+devkit = "aidevkit.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aidevkit"]
