@@ -48,8 +48,25 @@ class RunResult:
     stderr: str
 
 
+class _Runner:
+    """Instance-scoped wrapper around subprocess.run.
+
+    The hermeticity guard in tests/conftest.py patches this instance's `run`
+    attribute. Using an instance method instead of a module-level reference to
+    subprocess.run prevents the patch from leaking into the global subprocess
+    module — integration-test fixtures that call subprocess.run directly are
+    unaffected.
+    """
+
+    def run(self, *args, **kwargs):
+        return subprocess.run(*args, **kwargs)
+
+
+_runner = _Runner()
+
+
 def run(cmd: list[str], *, check: bool = False, cwd: Optional[Path] = None) -> RunResult:
-    proc = subprocess.run(
+    proc = _runner.run(
         cmd,
         cwd=cwd,
         capture_output=True,
