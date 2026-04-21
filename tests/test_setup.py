@@ -62,6 +62,9 @@ def test_setup_creates_symlinks_under_fake_home(
     assert cmd_dir.is_dir()
     linked = list(cmd_dir.iterdir())
     assert linked, "setup should have created at least one symlink"
+    linked_names = {entry.name for entry in linked}
+    assert "devkit.bootstrap.md" in linked_names
+    assert "devkit.archive.md" in linked_names
     for entry in linked:
         assert entry.is_symlink()
         assert entry.name.endswith(".md")

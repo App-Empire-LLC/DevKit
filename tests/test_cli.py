@@ -31,6 +31,8 @@ EXPECTED_HELP = """\
 │            first).                                                           │
 │ sync       Fetch and rebase every worktree in the current workspace onto its │
 │            trunk.                                                            │
+│ archive    Archive a completed per-issue workspace: post spec as issue       │
+│            comment, move worktree to _archived/, prune registrations.        │
 │ version    Print the installed aidevkit version.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 """
