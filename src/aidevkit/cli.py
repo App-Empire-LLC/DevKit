@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from . import __version__
+from . import archive as _archive
 from . import bootstrap as _bootstrap
 from . import doctor as _doctor
 from . import setup as _setup
@@ -72,6 +73,33 @@ def sync(
     ),
 ) -> None:
     code = _sync.cmd_sync(json_output=json, dry_run=dry_run)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    help="Archive a completed per-issue workspace: post spec as issue comment, "
+    "move worktree to _archived/, prune registrations.",
+)
+def archive(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="OWNER/REPO#N",
+        help="GitHub issue reference, e.g. 'App-Empire-LLC/DevKit#4'. "
+        "Bare '#N' (or 'N') infers the repo from the current worktree.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Override the PR-merged guardrail. Does NOT override the "
+        "_archived/ collision check.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print planned actions without making changes.",
+    ),
+) -> None:
+    code = _archive.cmd_archive(issue_arg=issue_arg, force=force, dry_run=dry_run)
     raise typer.Exit(code=code)
 
 
