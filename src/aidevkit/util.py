@@ -24,8 +24,11 @@ E_REPO_NOT_FOUND = 13
 E_PRS_NOT_MERGED = 14
 E_ARCHIVE_COLLISION = 15
 E_WORKSPACE_MISSING = 16
+E_ORIGIN_MAIN_UNAVAILABLE = 17
 E_NOT_IN_WORKSPACE = 20
 E_SYNC_PARTIAL = 21
+E_BEHIND_ORIGIN = 22
+E_PREFLIGHT_FAILED = 23
 
 out = Console(markup=False, highlight=False, soft_wrap=True)
 err = Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
