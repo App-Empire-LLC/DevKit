@@ -1,3 +1,11 @@
+"""Shared helpers for DevKit CLI.
+
+This module is the **canonical shell seam** for DevKit. All `git`, `gh`, and
+other subprocess invocations MUST flow through `run()` (or its wrappers `git()`
+/ `gh()`). Other modules MUST NOT `import subprocess` directly — doing so
+bypasses the seam that tests use to enforce hermeticity (see
+`tests/conftest.py::_fail_on_unmocked_shell`).
+"""
 from __future__ import annotations
 
 import subprocess

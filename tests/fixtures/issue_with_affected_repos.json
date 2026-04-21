@@ -1,0 +1,5 @@
+{
+  "title": "Add pytest + ruff testing infrastructure",
+  "url": "https://github.com/App-Empire-LLC/DevKit/issues/22",
+  "body": "## Summary\n\nSet up testing and linting infrastructure for the DevKit CLI.\n\n## Affected Repos\n\n- App-Empire-LLC/DevKit\n- App-Empire-LLC/appire_docs\n\n## Acceptance Criteria\n\n- pytest suite runs green\n- ruff check passes\n"
+}

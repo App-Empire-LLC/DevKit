@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from .util import (
     E_DEP_MISSING,
@@ -18,7 +17,6 @@ from .util import (
     git,
     info,
     log,
-    run,
 )
 
 _ISSUE_REF = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
@@ -92,7 +90,8 @@ def _resolve_affected_repos(
 
     if not repos:
         die(
-            "no affected repos could be determined. Add a '## Affected Repos' section to the issue body, or re-run with --repos owner/a,owner/b",
+            "no affected repos could be determined. Add a '## Affected Repos' section to the "
+            "issue body, or re-run with --repos owner/a,owner/b",
             code=E_REPOS_MISSING,
         )
     return repos
@@ -133,7 +132,8 @@ def cmd_bootstrap(
         "--json", "title,body,url",
     )
     if res.code != 0:
-        die(f"failed to fetch {issue_home}#{num}: {res.stderr.strip() or res.stdout.strip()}", code=1)
+        detail = res.stderr.strip() or res.stdout.strip()
+        die(f"failed to fetch {issue_home}#{num}: {detail}", code=1)
 
     try:
         payload = json.loads(res.stdout)
@@ -188,8 +188,9 @@ def cmd_bootstrap(
                 cwd=src,
             )
             if add_res.code != 0:
+                detail = add_res.stderr.strip() or add_res.stdout.strip()
                 die(
-                    f"git worktree add failed for {reponame}: {add_res.stderr.strip() or add_res.stdout.strip()}",
+                    f"git worktree add failed for {reponame}: {detail}",
                     code=1,
                 )
     except Exception:
