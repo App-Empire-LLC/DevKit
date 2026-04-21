@@ -29,6 +29,8 @@ EXPECTED_HELP = """\
 │ doctor     Check dependencies, required env vars, and gh authentication.     │
 │ setup      Link DevKit slash commands into ~/.claude/commands/ (runs doctor  │
 │            first).                                                           │
+│ sync       Fetch and rebase every worktree in the current workspace onto its │
+│            trunk.                                                            │
 │ version    Print the installed aidevkit version.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 """
