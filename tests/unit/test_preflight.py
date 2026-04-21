@@ -7,8 +7,6 @@ Detect-only — MUST NOT rebase, merge, reset, or mutate any ref outside of
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from typer.testing import CliRunner
 
@@ -56,9 +54,7 @@ def test_preflight_up_to_date_exits_zero(fake_run, runner: CliRunner) -> None:
 # --- T016: behind exits E_BEHIND_ORIGIN with count --------------------------
 
 
-def test_preflight_behind_exits_nonzero_with_count(
-    fake_run, runner: CliRunner
-) -> None:
+def test_preflight_behind_exits_nonzero_with_count(fake_run, runner: CliRunner) -> None:
     _script_happy_preflight(fake_run, behind_rev_list_stdout="3\n")
     result = runner.invoke(app, ["preflight"])
     assert result.exit_code == E_BEHIND_ORIGIN, result.output
@@ -166,9 +162,7 @@ def test_preflight_no_mutations(fake_run, runner: CliRunner) -> None:
 # --- T020: outside-worktree exits E_PREFLIGHT_FAILED (both shapes) ----------
 
 
-def test_preflight_outside_worktree_nonzero_exit(
-    fake_run, runner: CliRunner
-) -> None:
+def test_preflight_outside_worktree_nonzero_exit(fake_run, runner: CliRunner) -> None:
     """Shape 1: git returns non-zero exit (not a git dir at all)."""
     fake_run.script_any_cwd(
         ("git", "rev-parse", "--is-inside-work-tree"),
@@ -179,9 +173,7 @@ def test_preflight_outside_worktree_nonzero_exit(
     assert "not inside a git worktree" in result.output
 
 
-def test_preflight_outside_worktree_false_stdout(
-    fake_run, runner: CliRunner
-) -> None:
+def test_preflight_outside_worktree_false_stdout(fake_run, runner: CliRunner) -> None:
     """Shape 2 (analysis U1): git returns exit 0 but stdout is "false"
     (possible when cwd is under `.git/` itself)."""
     fake_run.script_any_cwd(

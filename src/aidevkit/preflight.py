@@ -42,7 +42,10 @@ def cmd_preflight() -> int:
 
     # 3) Verify origin/main exists as a remote-tracking ref.
     verify_res = git(
-        "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{_TRUNK}",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"refs/remotes/origin/{_TRUNK}",
         cwd=cwd,
     )
     if verify_res.code != 0:

@@ -333,7 +333,9 @@ def test_bootstrap_fetches_origin_before_worktree_add(
     worktree_idx = _first(lambda c: c["cmd"][:3] == ["git", "worktree", "add"])
 
     assert fetch_idx != -1, f"no git fetch call observed in {calls}"
-    assert verify_idx != -1, f"no git rev-parse --verify refs/remotes/origin/main observed in {calls}"
+    assert verify_idx != -1, (
+        f"no git rev-parse --verify refs/remotes/origin/main observed in {calls}"
+    )
     assert init_idx != -1, "no git init call observed"
     assert worktree_idx != -1, "no git worktree add call observed"
     assert fetch_idx < init_idx, "fetch must precede git init (validation before creation)"
@@ -447,7 +449,9 @@ def test_bootstrap_fetch_failure_creates_nothing(
     capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
     capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit git fetch
     capture.queue(RunResult(code=0, stdout="abc123\n", stderr=""))  # DevKit rev-parse --verify
-    capture.queue(RunResult(code=128, stdout="", stderr="fatal: could not read from remote repository"))
+    capture.queue(
+        RunResult(code=128, stdout="", stderr="fatal: could not read from remote repository")
+    )
 
     result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
 
