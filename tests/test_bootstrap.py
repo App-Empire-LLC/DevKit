@@ -130,7 +130,9 @@ def test_flag_dry_run_skips_mutations(runner: CliRunner, bootstrap_env: dict) ->
 
     calls = bootstrap_env["capture"].calls
     git_worktree_calls = [c for c in calls if c["cmd"][:2] == ["git", "worktree"]]
-    gh_comment_calls = [c for c in calls if c["cmd"][:2] == ["gh", "issue"] and "comment" in c["cmd"]]
+    gh_comment_calls = [
+        c for c in calls if c["cmd"][:2] == ["gh", "issue"] and "comment" in c["cmd"]
+    ]
     assert git_worktree_calls == [], "dry-run must not add worktrees"
     assert gh_comment_calls == [], "dry-run must not post ack comments"
 

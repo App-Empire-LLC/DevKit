@@ -18,10 +18,27 @@ app = typer.Typer(
 
 @app.command(help="Create a per-issue workspace directory with per-repo git worktrees.")
 def bootstrap(
-    issue_arg: str = typer.Argument(..., metavar="OWNER/REPO#N", help="GitHub issue reference, e.g. 'App-Empire-LLC/DevKit#21'."),
-    repos: str = typer.Option("", "--repos", help="Comma-separated owner/repo list overriding the issue body's '## Affected Repos' section."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without making changes."),
-    no_ack: bool = typer.Option(False, "--no-ack", help="Skip posting the acknowledgement comment on the issue."),
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="OWNER/REPO#N",
+        help="GitHub issue reference, e.g. 'App-Empire-LLC/DevKit#21'.",
+    ),
+    repos: str = typer.Option(
+        "",
+        "--repos",
+        help="Comma-separated owner/repo list overriding the issue body's "
+        "'## Affected Repos' section.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print planned actions without making changes.",
+    ),
+    no_ack: bool = typer.Option(
+        False,
+        "--no-ack",
+        help="Skip posting the acknowledgement comment on the issue.",
+    ),
 ) -> None:
     code = _bootstrap.cmd_bootstrap(
         issue_arg=issue_arg,
