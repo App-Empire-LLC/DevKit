@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/App-Empire-LLC/DevKit/schemas/sync-output.schema.json",
+  "title": "DevKit sync --json output",
+  "description": "Schema for the single JSON document emitted on stdout by `devkit sync --json` (and `devkit sync --dry-run --json`). See DevKit#11.",
+  "type": "object",
+  "required": ["workspace_root", "overall_status", "exit_code", "worktrees"],
+  "additionalProperties": false,
+  "properties": {
+    "workspace_root": {
+      "type": "string",
+      "description": "Absolute path to the workspace directory that `devkit sync` operated on."
+    },
+    "overall_status": {
+      "type": "string",
+      "enum": ["ok", "partial", "error", "dry-run"],
+      "description": "Aggregate status. `ok` iff every worktree outcome is clean. `partial` if any conflict/skip but no hard error. `error` if any fetch-failed/trunk-missing/rebase-error. `dry-run` for --dry-run invocations."
+    },
+    "exit_code": {
+      "type": "integer",
+      "enum": [0, 12, 20, 21],
+      "description": "Duplicate of the process exit code for caller convenience. 0 clean, 12 dep missing, 20 not in workspace, 21 sync partial."
+    },
+    "worktrees": {
+      "type": "array",
+      "description": "Per-worktree outcomes, sorted alphabetically by `repo`.",
+      "items": { "$ref": "#/$defs/WorktreeResult" }
+    }
+  },
+  "$defs": {
+    "WorktreeResult": {
+      "type": "object",
+      "required": ["repo", "path", "branch", "trunk", "outcome", "behind_count"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Short repo name (the worktree directory's name inside the workspace)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the worktree directory."
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch checked out in the worktree at the start of sync. Typically `issue-<repo>-<N>`."
+        },
+        "trunk": {
+          "type": "string",
+          "description": "Resolved trunk branch name (per `TRUNK.md` precedence; defaults to `main`)."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "rebased",
+            "fast-forwarded",
+            "up-to-date",
+            "skipped-dirty",
+            "fetch-failed",
+            "trunk-missing",
+            "conflict",
+            "rebase-error",
+            "dry-run-plan"
+          ],
+          "description": "Terminal classification for this worktree. `dry-run-plan` appears only when invoked with --dry-run."
+        },
+        "commits_replayed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Commit count replayed onto trunk. Present only when outcome=rebased."
+        },
+        "behind_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Commits on origin/<trunk> that were not reachable from HEAD before sync. Equals 0 for up-to-date, and is coerced to 0 when fetch-failed (value unknown)."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable detail or remediation hint. Required for non-clean outcomes; may be omitted for clean outcomes."
+        }
+      },
+      "allOf": [
+        {
+          "if":  { "properties": { "outcome": { "const": "rebased" } } },
+          "then": { "required": ["commits_replayed"] }
+        },
+        {
+          "if":  { "properties": { "outcome": { "enum": ["skipped-dirty", "fetch-failed", "trunk-missing", "conflict", "rebase-error"] } } },
+          "then": { "required": ["message"] }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "workspace_root": "/Users/dev/.app_empire_worktrees/DevKit-issue-11",
+      "overall_status": "partial",
+      "exit_code": 21,
+      "worktrees": [
+        {
+          "repo": "DevKit",
+          "path": "/Users/dev/.app_empire_worktrees/DevKit-issue-11/DevKit",
+          "branch": "issue-DevKit-11",
+          "trunk": "main",
+          "outcome": "rebased",
+          "commits_replayed": 3,
+          "behind_count": 3
+        },
+        {
+          "repo": "appire_docs",
+          "path": "/Users/dev/.app_empire_worktrees/DevKit-issue-11/appire_docs",
+          "branch": "issue-DevKit-11",
+          "trunk": "main",
+          "outcome": "conflict",
+          "behind_count": 1,
+          "message": "rebase left worktree in rebase-in-progress state. Resolve conflicts and run `git rebase --continue`, or `git rebase --abort` to back out."
+        }
+      ]
+    }
+  ]
+}

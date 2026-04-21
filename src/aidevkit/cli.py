@@ -6,6 +6,7 @@ from . import __version__
 from . import bootstrap as _bootstrap
 from . import doctor as _doctor
 from . import setup as _setup
+from . import sync as _sync
 from .util import info
 
 app = typer.Typer(
@@ -58,6 +59,19 @@ def doctor() -> None:
 @app.command(help="Link DevKit slash commands into ~/.claude/commands/ (runs doctor first).")
 def setup() -> None:
     code = _setup.cmd_setup()
+    raise typer.Exit(code=code)
+
+
+@app.command(help="Fetch and rebase every worktree in the current workspace onto its trunk.")
+def sync(
+    json: bool = typer.Option(False, "--json", help="Emit a single JSON document on stdout."),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print planned actions without running git fetch or git rebase.",
+    ),
+) -> None:
+    code = _sync.cmd_sync(json_output=json, dry_run=dry_run)
     raise typer.Exit(code=code)
 
 

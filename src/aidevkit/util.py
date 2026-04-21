@@ -21,6 +21,8 @@ E_REPOS_MISSING = 10
 E_WORKTREE_EXISTS = 11
 E_DEP_MISSING = 12
 E_REPO_NOT_FOUND = 13
+E_NOT_IN_WORKSPACE = 20
+E_SYNC_PARTIAL = 21
 
 out = Console(markup=False, highlight=False, soft_wrap=True)
 err = Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
