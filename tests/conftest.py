@@ -2,9 +2,12 @@
 
 Hermeticity contract: no test is permitted to invoke real `git` or `gh` against
 real repositories or the real GitHub API. The autouse `_fail_on_unmocked_shell`
-fixture enforces this by patching `aidevkit.util.subprocess.run` — the single
-import site of `subprocess` in DevKit — so any bypass of the `util.run` seam
-surfaces as a loud `RuntimeError`.
+fixture enforces this by patching `aidevkit.util._runner.run` — the
+instance-scoped shell seam introduced for DevKit#29 — so any bypass of the
+`util.run` wrapper surfaces as a loud `RuntimeError`. Patching the instance
+(rather than a module-level `subprocess.run` reference) keeps the guard
+isolated from the global `subprocess` module; integration-test fixtures that
+call `subprocess.run` directly are unaffected.
 """
 from __future__ import annotations
 
@@ -96,18 +99,33 @@ def gh_response() -> Callable[[str], dict[str, Any]]:
 
 
 @pytest.fixture(autouse=True)
-def _fail_on_unmocked_shell(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Hermeticity guard: any real `subprocess.run` call via `util` is a violation.
+def _fail_on_unmocked_shell(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hermeticity guard: any real shell call via `util` is a violation.
 
     Fires when `_CAPTURE_ACTIVE` is False (no `subprocess_capture` in use) —
     this surfaces tests that trigger `util.run` without having installed the
     fixture. When `_CAPTURE_ACTIVE` is True, this still fires if something
-    bypassed the `util.run` seam and reached `subprocess.run` directly.
+    bypassed the `util.run` seam and reached the runner directly.
+
+    Scope: unit tests only. Integration tests under `tests/integration/` drive
+    the real `git` binary against tempdir fixtures and legitimately route
+    through `util.run`, so the guard is not installed there. (Per DevKit#29,
+    this replaces the tree-wide no-op override that previously lived in
+    `tests/integration/conftest.py`.)
+
+    Patches `aidevkit.util._runner.run` (instance attribute) rather than the
+    global `subprocess.run` — see module docstring.
     """
+    if any(part == "integration" for part in request.node.path.parts):
+        return
+
     def guard(*args: Any, **kwargs: Any) -> None:
         if _CAPTURE_ACTIVE:
             raise RuntimeError(
-                "hermeticity violation: util.subprocess.run invoked despite "
+                "hermeticity violation: util._runner.run invoked despite "
                 "subprocess_capture being active — something bypassed the util.run seam"
             )
         raise RuntimeError(
@@ -115,4 +133,4 @@ def _fail_on_unmocked_shell(monkeypatch: pytest.MonkeyPatch) -> None:
             "fixture active"
         )
 
-    monkeypatch.setattr("aidevkit.util.subprocess.run", guard)
+    monkeypatch.setattr("aidevkit.util._runner.run", guard)

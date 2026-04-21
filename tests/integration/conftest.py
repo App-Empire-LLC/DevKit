@@ -113,18 +113,6 @@ class FakeWorkspace:
             (self.workspace_root / scope / "TRUNK.md").write_text(f"{value}\n")
 
 
-@pytest.fixture(autouse=True)
-def _fail_on_unmocked_shell() -> None:
-    """Override the top-level hermeticity guard for integration tests.
-
-    Integration tests drive the real `git` binary against tempdir fixtures —
-    that's the point. The parent autouse guard in `tests/conftest.py` exists
-    to catch unit tests that forget `subprocess_capture`; it's not applicable
-    here.
-    """
-    return
-
-
 @pytest.fixture
 def fake_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeWorkspace:
     """Two repos, two origins, one workspace with two worktrees on `issue-<repo>-42`."""

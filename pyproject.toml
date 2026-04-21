@@ -38,7 +38,14 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Don't import subprocess directly in src/aidevkit/. Use aidevkit.util.run (see tests/conftest.py::_fail_on_unmocked_shell for the hermeticity rationale)."
+
+[tool.ruff.lint.per-file-ignores]
+"src/aidevkit/util.py" = ["TID251"]
+"tests/**" = ["TID251"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
