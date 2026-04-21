@@ -549,3 +549,96 @@ def test_missing_spec_succeeds_and_skips_comment(
     assert "no spec artifact found" in result.output.lower() or \
            "Spec comments posted: 0" in result.output
     assert not workspace.exists()
+
+
+# --- Already-closed issue (edge case, polish T031) ---------------------------
+
+
+def test_already_closed_issue_succeeds(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """If the issue is already closed, archive completes without erroring on the close step."""
+    workspace, _ = _make_workspace(
+        tmp_path,
+        "DevKit",
+        4,
+        upstream_repos=[("DevKit", "App-Empire-LLC/DevKit")],
+    )
+    monkeypatch.setattr("aidevkit.archive.shutil.which", _which_git_gh)
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(tmp_path / "worktrees"))
+
+    close_calls: list[list[str]] = []
+
+    def shell(cmd: list[str], **kwargs) -> RunResult:
+        if cmd[:3] == ["git", "remote", "get-url"]:
+            return RunResult(
+                code=0,
+                stdout="https://github.com/App-Empire-LLC/DevKit.git\n",
+                stderr="",
+            )
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return RunResult(code=0, stdout=json.dumps([]), stderr="")
+        if cmd[:4] == ["gh", "issue", "comment", "4"]:
+            return RunResult(code=0, stdout="", stderr="")
+        if cmd[:4] == ["gh", "issue", "view", "4"]:
+            return RunResult(code=0, stdout=json.dumps({"state": "CLOSED"}), stderr="")
+        if cmd[:4] == ["gh", "issue", "close", "4"]:
+            close_calls.append(list(cmd))
+            return RunResult(code=0, stdout="", stderr="")
+        return RunResult(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("aidevkit.util.run", shell)
+
+    result = runner.invoke(app, ["archive", "App-Empire-LLC/DevKit#4"])
+    assert result.exit_code == 0, result.output
+    assert close_calls == [], (
+        "archive must not call `gh issue close` when issue is already closed"
+    )
+    assert not workspace.exists()
+
+
+# --- Fail-fast mid-archive (FR-011a, polish T029) -----------------------------
+
+
+def test_mv_failure_leaves_partial_state_no_rollback(
+    runner: CliRunner,
+    archive_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If `shutil.move` raises after comments have been posted, no rollback is attempted.
+
+    The command must propagate the exception and leave the posted-comment state
+    in place for the user to resolve. Verifies FR-011a ("fail-fast, no auto-rollback").
+    """
+    workspace: Path = archive_env["workspace"]
+    posted_comments: list[list[str]] = []
+
+    # Replace util.run with a version that records gh issue comment calls so we
+    # can assert no "unpost" (delete) call happens after the mv failure.
+    original_run = __import__("aidevkit.util", fromlist=["run"]).run
+
+    def recording_run(cmd: list[str], **kwargs) -> RunResult:
+        if cmd[:3] == ["gh", "issue", "comment"]:
+            posted_comments.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "DELETE" in cmd:
+            raise AssertionError(
+                "archive must not attempt to delete posted comments on mid-step failure"
+            )
+        return original_run(cmd, **kwargs)
+
+    monkeypatch.setattr("aidevkit.util.run", recording_run)
+
+    def failing_move(src, dst):
+        raise OSError("simulated mv failure")
+
+    monkeypatch.setattr("aidevkit.archive.shutil.move", failing_move)
+
+    result = runner.invoke(app, ["archive", "App-Empire-LLC/DevKit#4"])
+    assert result.exit_code != 0
+    # Comments were posted BEFORE the mv step — they stay posted (no rollback).
+    assert len(posted_comments) >= 1
+    # Workspace still exists (mv failed, no re-move attempted).
+    assert workspace.exists()
