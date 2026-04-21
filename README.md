@@ -145,6 +145,24 @@ cd $APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/<repo> && claude
 
 This does not restore the AppEmpire meta-root CLAUDE.md — that's what #2 fixes, by seeding a root CLAUDE.md at the worktree top so the ancestor walk can find it.
 
+## Development
+
+These commands are for DevKit maintainers working on the tool itself — not for installing it.
+
+```bash
+# From a DevKit clone
+uv sync --extra test        # editable install + pytest, pytest-cov, ruff
+pytest                       # run the test suite (under 10s, fully offline)
+pytest --cov                 # include a terminal coverage report
+ruff check .                 # lint the tree
+ruff check --fix .           # auto-apply fixable suggestions
+```
+
+Tests are hermetic: the autouse `_fail_on_unmocked_shell` fixture in
+`tests/conftest.py` raises on any real `subprocess.run` call routed through
+`aidevkit.util`. All `git`/`gh` work in tests goes through the
+`subprocess_capture` fixture. Coverage is report-only — no threshold gate.
+
 ## License
 
 See [LICENSE](LICENSE).
