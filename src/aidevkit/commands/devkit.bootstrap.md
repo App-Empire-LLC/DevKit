@@ -28,7 +28,7 @@ If the user gives you a bare number or a URL, ask them to confirm the `owner/rep
 
 4. If the script exits with **code 13** (`source repo not found`), surface the error — the user may need to clone the missing repo into `$APP_EMPIRE_PROJECTS` first.
 
-5. If the script exits with **code 14** (`origin/main unavailable` — either the `git fetch origin` failed or `origin/main` does not exist after fetch), surface the error. The message names the affected repo. Common causes: network failure, missing/misconfigured `origin` remote, repo has been renamed, or trunk is not called `main`. Do NOT attempt to bypass by hand-creating the branch from local `main` — that reintroduces the exact stale-main bug this check exists to prevent.
+5. If the script exits with **code 17** (`origin/main unavailable` — either the `git fetch origin` failed or `origin/main` does not exist after fetch), surface the error. The message names the affected repo. Common causes: network failure, missing/misconfigured `origin` remote, repo has been renamed, or trunk is not called `main`. Do NOT attempt to bypass by hand-creating the branch from local `main` — that reintroduces the exact stale-main bug this check exists to prevent. (Note: code 14 is `E_PRS_NOT_MERGED` used by `devkit archive`, not bootstrap.)
 
 6. On success, surface the `cd ... && claude` command the script prints at the end, so the user can start a fresh implementation session in the worktree directory.
 
