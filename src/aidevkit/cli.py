@@ -6,6 +6,7 @@ from . import __version__
 from . import archive as _archive
 from . import bootstrap as _bootstrap
 from . import doctor as _doctor
+from . import preflight as _preflight
 from . import setup as _setup
 from . import sync as _sync
 from .util import info
@@ -100,6 +101,15 @@ def archive(
     ),
 ) -> None:
     code = _archive.cmd_archive(issue_arg=issue_arg, force=force, dry_run=dry_run)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    help="Check whether the current issue branch is behind origin/main "
+    "(detect-only; no mutation).",
+)
+def preflight() -> None:
+    code = _preflight.cmd_preflight()
     raise typer.Exit(code=code)
 
 

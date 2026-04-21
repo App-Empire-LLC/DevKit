@@ -33,6 +33,8 @@ EXPECTED_HELP = """\
 │            trunk.                                                            │
 │ archive    Archive a completed per-issue workspace: post spec as issue       │
 │            comment, move worktree to _archived/, prune registrations.        │
+│ preflight  Check whether the current issue branch is behind origin/main      │
+│            (detect-only; no mutation).                                       │
 │ version    Print the installed aidevkit version.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 """
