@@ -10,7 +10,6 @@ import inspect
 
 from aidevkit import sync as _sync
 
-
 FORBIDDEN = (
     "git push",
     "push --force",

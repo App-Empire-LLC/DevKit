@@ -10,7 +10,6 @@ import pytest
 from aidevkit import util as _util
 from aidevkit.util import RunResult
 
-
 Cmd = tuple[str, ...]
 # Either a static RunResult, a factory that returns one, or a sequence consumed
 # in FIFO order for multiple calls with the same (cmd, cwd).
@@ -34,7 +33,13 @@ class FakeRun:
     def script_any_cwd(self, cmd: Cmd, result: RunResult) -> None:
         self.scripts[(cmd, None)] = result
 
-    def __call__(self, cmd: list[str], *, check: bool = False, cwd: Optional[Path] = None) -> RunResult:
+    def __call__(
+        self,
+        cmd: list[str],
+        *,
+        check: bool = False,
+        cwd: Optional[Path] = None,
+    ) -> RunResult:
         key = (tuple(cmd), cwd)
         self.calls.append(key)
         if key in self.scripts:
