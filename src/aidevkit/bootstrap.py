@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .util import (
     E_DEP_MISSING,
+    E_ORIGIN_MAIN_UNAVAILABLE,
     E_REPO_NOT_FOUND,
     E_REPOS_MISSING,
     E_USAGE,
@@ -105,6 +106,37 @@ def _verify_source_repos(repos: list[str], projects_dir: Path) -> None:
             die(f"source repo not found at {src} (from {full})", code=E_REPO_NOT_FOUND)
 
 
+def _validate_origin_main(repos: list[str], projects_dir: Path) -> None:
+    """Validation phase of the two-phase bootstrap (DevKit#27 FR-001).
+
+    For each affected repo, fetch origin and verify ``origin/main`` exists.
+    Fail-fast on first repo that fails: no subsequent repos are fetched, and
+    no worktrees or branches are created for any repo. The caller MUST run
+    this before any filesystem or worktree mutation so that atomicity is
+    preserved (FR-004, FR-005, SC-007).
+    """
+    for full in repos:
+        reponame = full.rsplit("/", 1)[-1]
+        src = projects_dir / reponame
+        log(f"fetch origin: {full}")
+        fetch_res = git("fetch", "origin", cwd=src)
+        if fetch_res.code != 0:
+            detail = fetch_res.stderr.strip() or fetch_res.stdout.strip() or "(no detail)"
+            die(
+                f"fetch origin failed for {full}: {detail}",
+                code=E_ORIGIN_MAIN_UNAVAILABLE,
+            )
+        verify_res = git(
+            "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main",
+            cwd=src,
+        )
+        if verify_res.code != 0:
+            die(
+                f"origin/main not found in {full} — is main the trunk? is the remote configured?",
+                code=E_ORIGIN_MAIN_UNAVAILABLE,
+            )
+
+
 def _format_ack_comment(workspace: Path, repos: list[str]) -> str:
     repos_line = " ".join(repos)
     return (
@@ -152,6 +184,7 @@ def cmd_bootstrap(
     workspaces_home = Path(os.environ["APP_EMPIRE_WORKTREES_HOME"])
 
     _verify_source_repos(repos, projects_dir)
+    _validate_origin_main(repos, projects_dir)
 
     workspace = workspaces_home / f"{repo}-issue-{num}"
     if workspace.exists():
@@ -184,7 +217,7 @@ def cmd_bootstrap(
             wt_target = workspace / reponame
             info(f"Adding worktree: {reponame}  ({src} -> {wt_target}, {branch})")
             add_res = git(
-                "worktree", "add", str(wt_target), "-b", branch,
+                "worktree", "add", str(wt_target), "-b", branch, "origin/main",
                 cwd=src,
             )
             if add_res.code != 0:

@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from aidevkit.cli import app
 from aidevkit.util import (
     E_DEP_MISSING,
+    E_ORIGIN_MAIN_UNAVAILABLE,
     E_REPO_NOT_FOUND,
     E_REPOS_MISSING,
     E_USAGE,
@@ -285,4 +286,260 @@ _EXIT_CODES_UNDER_TEST = (
     E_WORKTREE_EXISTS,
     E_DEP_MISSING,
     E_REPO_NOT_FOUND,
+    E_ORIGIN_MAIN_UNAVAILABLE,
 )
+
+
+# --- DevKit#27: bootstrap origin/main semantics -----------------------------
+#
+# Tests T003–T005 (US1 happy path) and T009–T010 (FR-006 hermeticity +
+# SC-006 ref-snapshot) for the two-phase bootstrap that bases new issue
+# branches on origin/main instead of the source repo's current HEAD.
+
+
+def _invoke_happy_bootstrap(
+    runner: CliRunner, bootstrap_env: dict, issue_arg: str = "App-Empire-LLC/DevKit#22"
+):
+    """Run a successful bootstrap with --no-ack. Returns the CliRunner result."""
+    capture = bootstrap_env["capture"]
+    capture.set_default(RunResult(code=0, stdout="", stderr=""))
+    # First shell call is `gh issue view`; queue the issue payload for it.
+    capture.queue(
+        RunResult(code=0, stdout=json.dumps(bootstrap_env["issue_payload"]), stderr="")
+    )
+    return runner.invoke(app, ["bootstrap", "--no-ack", issue_arg])
+
+
+def test_bootstrap_fetches_origin_before_worktree_add(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T003 / FR-001: validation phase (fetch + verify) precedes creation phase."""
+    result = _invoke_happy_bootstrap(runner, bootstrap_env)
+    assert result.exit_code == 0, result.output
+    calls = bootstrap_env["capture"].calls
+
+    def _first(pred) -> int:
+        for i, c in enumerate(calls):
+            if pred(c):
+                return i
+        return -1
+
+    fetch_idx = _first(lambda c: c["cmd"][:2] == ["git", "fetch"])
+    verify_idx = _first(
+        lambda c: c["cmd"][:2] == ["git", "rev-parse"]
+        and "refs/remotes/origin/main" in c["cmd"]
+    )
+    init_idx = _first(lambda c: c["cmd"][:2] == ["git", "init"])
+    worktree_idx = _first(lambda c: c["cmd"][:3] == ["git", "worktree", "add"])
+
+    assert fetch_idx != -1, f"no git fetch call observed in {calls}"
+    assert verify_idx != -1, (
+        f"no git rev-parse --verify refs/remotes/origin/main observed in {calls}"
+    )
+    assert init_idx != -1, "no git init call observed"
+    assert worktree_idx != -1, "no git worktree add call observed"
+    assert fetch_idx < init_idx, "fetch must precede git init (validation before creation)"
+    assert verify_idx < init_idx, "rev-parse --verify must precede git init"
+    assert init_idx < worktree_idx, "git init must precede git worktree add"
+
+
+def test_bootstrap_worktree_add_uses_origin_main(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T004 / FR-002: every `git worktree add` passes `origin/main` as start point."""
+    result = _invoke_happy_bootstrap(runner, bootstrap_env)
+    assert result.exit_code == 0, result.output
+    worktree_adds = [
+        c for c in bootstrap_env["capture"].calls
+        if c["cmd"][:3] == ["git", "worktree", "add"]
+    ]
+    assert worktree_adds, "expected at least one git worktree add call"
+    for c in worktree_adds:
+        assert c["cmd"][-1] == "origin/main", (
+            f"worktree add must end with origin/main start point, got: {c['cmd']}"
+        )
+
+
+def test_bootstrap_does_not_touch_local_main(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T005 / FR-003: no command mutates local main in any source repo."""
+    result = _invoke_happy_bootstrap(runner, bootstrap_env)
+    assert result.exit_code == 0, result.output
+    forbidden_prefixes = (
+        ("git", "branch", "-f", "main"),
+        ("git", "reset"),
+        ("git", "update-ref", "refs/heads/main"),
+        ("git", "checkout", "main"),
+    )
+    for c in bootstrap_env["capture"].calls:
+        cmd = tuple(c["cmd"])
+        for bad in forbidden_prefixes:
+            assert cmd[: len(bad)] != bad, (
+                f"forbidden local-main mutation: {' '.join(c['cmd'])}"
+            )
+
+
+def test_bootstrap_leaves_source_repo_working_tree_untouched(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T009 / FR-006 (analysis C1): the only git verbs observed against a
+    source repo's cwd are fetch, rev-parse (read-only), and worktree add."""
+    result = _invoke_happy_bootstrap(runner, bootstrap_env)
+    assert result.exit_code == 0, result.output
+    projects_dir = bootstrap_env["projects_dir"]
+    src_cwds = {projects_dir / name for name in ("DevKit", "appire_docs")}
+    allowed = (
+        ("git", "fetch"),
+        ("git", "rev-parse"),
+        ("git", "worktree", "add"),
+    )
+    for c in bootstrap_env["capture"].calls:
+        if c["cwd"] not in src_cwds:
+            continue
+        cmd = tuple(c["cmd"])
+        assert any(cmd[: len(p)] == p for p in allowed), (
+            f"unexpected git verb against source repo {c['cwd']}: {' '.join(c['cmd'])}"
+        )
+
+
+def test_bootstrap_ref_snapshot_matches_allowed_delta(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T010 / SC-006 (analysis C2): the only ref-mutating verbs observed are
+    `git fetch` (updates refs/remotes/origin/*) and `git worktree add -b`
+    (creates exactly the new issue branch). Positive assertion — enumerate
+    every git call and reject unexpected ref mutators or --force* flags."""
+    result = _invoke_happy_bootstrap(runner, bootstrap_env)
+    assert result.exit_code == 0, result.output
+    ref_mutating_verbs = {"branch", "update-ref", "push", "tag", "reflog"}
+    for c in bootstrap_env["capture"].calls:
+        if c["cmd"][:1] != ["git"]:
+            continue
+        cmd = c["cmd"]
+        if cmd[:2] == ["git", "fetch"]:
+            continue
+        if cmd[:3] == ["git", "worktree", "add"]:
+            continue
+        # Every other git verb must not be in the ref-mutating set.
+        assert len(cmd) >= 2, f"malformed git call: {cmd}"
+        assert cmd[1] not in ref_mutating_verbs, (
+            f"unexpected ref-mutating verb: {' '.join(cmd)}"
+        )
+        # And no --force* flags anywhere.
+        for tok in cmd:
+            assert not tok.startswith("--force"), f"forbidden --force flag: {' '.join(cmd)}"
+
+
+# --- DevKit#27 US3: multi-repo atomicity and clear diagnostics --------------
+
+
+def test_bootstrap_fetch_failure_creates_nothing(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T011 / FR-004, SC-007: if any affected repo's fetch fails, bootstrap
+    aborts before any worktree, branch, or workspace dir is created — even
+    for repos whose validation would have succeeded."""
+    capture = bootstrap_env["capture"]
+    payload = bootstrap_env["issue_payload"]
+    # Call sequence: gh issue view, DevKit fetch OK, DevKit verify OK,
+    # appire_docs fetch FAILS. Queue exactly these four; default covers any
+    # unexpected trailing call but none is expected after the failure.
+    capture.set_default(RunResult(code=0, stdout="", stderr=""))
+    capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
+    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit git fetch
+    capture.queue(RunResult(code=0, stdout="abc123\n", stderr=""))  # DevKit rev-parse --verify
+    capture.queue(
+        RunResult(code=128, stdout="", stderr="fatal: could not read from remote repository")
+    )
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
+
+    assert result.exit_code == E_ORIGIN_MAIN_UNAVAILABLE, result.output
+    # No creation-phase calls.
+    git_inits = [c for c in capture.calls if c["cmd"][:2] == ["git", "init"]]
+    git_worktree_adds = [
+        c for c in capture.calls if c["cmd"][:3] == ["git", "worktree", "add"]
+    ]
+    assert git_inits == [], "git init must not run when validation fails"
+    assert git_worktree_adds == [], "git worktree add must not run when validation fails"
+    # And no workspace dir on disk.
+    assert not (bootstrap_env["worktrees_dir"] / "DevKit-issue-22").exists(), (
+        "workspace dir must not exist when validation fails"
+    )
+
+
+def test_bootstrap_missing_origin_main_creates_nothing(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T012 / FR-005, SC-007: same atomicity guarantee when rev-parse --verify
+    fails (origin/main ref does not exist after fetch)."""
+    capture = bootstrap_env["capture"]
+    payload = bootstrap_env["issue_payload"]
+    capture.set_default(RunResult(code=0, stdout="", stderr=""))
+    capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
+    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit git fetch OK
+    capture.queue(RunResult(code=1, stdout="", stderr=""))  # DevKit rev-parse --verify FAILS
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
+
+    assert result.exit_code == E_ORIGIN_MAIN_UNAVAILABLE, result.output
+    git_inits = [c for c in capture.calls if c["cmd"][:2] == ["git", "init"]]
+    git_worktree_adds = [
+        c for c in capture.calls if c["cmd"][:3] == ["git", "worktree", "add"]
+    ]
+    assert git_inits == []
+    assert git_worktree_adds == []
+    assert not (bootstrap_env["worktrees_dir"] / "DevKit-issue-22").exists()
+
+
+def test_bootstrap_fetch_error_message_identifies_repo(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T013 / FR-004, FR-013: error message names the failing repo and
+    distinguishes fetch-failure from missing-origin/main."""
+    capture = bootstrap_env["capture"]
+    payload = bootstrap_env["issue_payload"]
+
+    # Case 1: fetch failure — message mentions the failing repo.
+    capture.set_default(RunResult(code=0, stdout="", stderr=""))
+    capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
+    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit fetch
+    capture.queue(RunResult(code=0, stdout="abc123\n", stderr=""))  # DevKit verify
+    capture.queue(
+        RunResult(code=128, stdout="", stderr="fatal: could not read Username for 'https://github.com'")
+    )
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
+    assert result.exit_code == E_ORIGIN_MAIN_UNAVAILABLE, result.output
+    assert "App-Empire-LLC/appire_docs" in result.output, (
+        f"fetch-failure message must identify the repo: {result.output}"
+    )
+    assert "fetch origin failed" in result.output, (
+        f"message must say 'fetch origin failed' (transient/network class): {result.output}"
+    )
+
+
+def test_bootstrap_missing_origin_message_distinguishes_from_fetch_fail(
+    runner: CliRunner, bootstrap_env: dict
+) -> None:
+    """T013 cont. / FR-005: the 'origin/main not found' diagnostic is
+    distinct from the 'fetch origin failed' one — distinguishing transient
+    (network / auth) failures from structural (remote misconfigured) ones."""
+    capture = bootstrap_env["capture"]
+    payload = bootstrap_env["issue_payload"]
+    capture.set_default(RunResult(code=0, stdout="", stderr=""))
+    capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
+    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit fetch OK
+    capture.queue(RunResult(code=1, stdout="", stderr=""))  # DevKit verify FAILS
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
+    assert result.exit_code == E_ORIGIN_MAIN_UNAVAILABLE, result.output
+    assert "App-Empire-LLC/DevKit" in result.output, (
+        "origin/main-missing message must identify the repo"
+    )
+    assert "origin/main not found" in result.output, (
+        f"message must say 'origin/main not found' (structural class): {result.output}"
+    )
+    assert "fetch origin failed" not in result.output, (
+        "missing-origin must NOT be reported as a fetch failure"
+    )
