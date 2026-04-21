@@ -65,7 +65,11 @@ def setup() -> None:
 @app.command(help="Fetch and rebase every worktree in the current workspace onto its trunk.")
 def sync(
     json: bool = typer.Option(False, "--json", help="Emit a single JSON document on stdout."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without running git fetch or git rebase."),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print planned actions without running git fetch or git rebase.",
+    ),
 ) -> None:
     code = _sync.cmd_sync(json_output=json, dry_run=dry_run)
     raise typer.Exit(code=code)
