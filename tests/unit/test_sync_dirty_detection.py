@@ -1,4 +1,5 @@
 """T012 [US1]: `is_dirty` via `git diff --quiet HEAD` exit-code semantics."""
+
 from __future__ import annotations
 
 from pathlib import Path

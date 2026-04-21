@@ -1,4 +1,5 @@
 """T033 [US3]: human renderer surfaces conflict remediation on indented lines."""
+
 from __future__ import annotations
 
 from pathlib import Path

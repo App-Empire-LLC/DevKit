@@ -1,4 +1,5 @@
 """T028 [US3]: conflict vs rebase-error based on rebase-state."""
+
 from __future__ import annotations
 
 from aidevkit import sync as _sync

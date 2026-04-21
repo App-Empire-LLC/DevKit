@@ -1,4 +1,5 @@
 """T015 [US1]: SyncReport.to_dict() conforms to shipped JSON schema."""
+
 from __future__ import annotations
 
 import json

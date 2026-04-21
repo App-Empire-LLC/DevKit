@@ -1,4 +1,5 @@
 """T038 [US2]: TRUNK.md precedence resolved against real git + real origins."""
+
 from __future__ import annotations
 
 import json

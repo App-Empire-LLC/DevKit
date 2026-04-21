@@ -1,6 +1,7 @@
 """T029 [US3]: a conflicting worktree is left in rebase-in-progress state, the
 other worktree syncs normally, and the user's pre-sync HEAD is recoverable
 via `git rebase --abort` (SC-003)."""
+
 from __future__ import annotations
 
 import json
@@ -10,9 +11,7 @@ from aidevkit import sync as _sync
 
 
 def _git(*args, cwd):
-    return subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
-    )
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
 
 
 def test_conflict_preserves_work(fake_workspace, monkeypatch, capsys):
@@ -50,6 +49,7 @@ def test_conflict_preserves_work(fake_workspace, monkeypatch, capsys):
     worktree_a = fake_workspace.workspace_root / "RepoA"
     git_dir = _git("rev-parse", "--git-path", "rebase-merge", cwd=worktree_a).stdout.strip()
     from pathlib import Path
+
     probe = Path(git_dir)
     if not probe.is_absolute():
         probe = worktree_a / probe

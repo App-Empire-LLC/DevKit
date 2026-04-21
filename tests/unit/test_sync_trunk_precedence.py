@@ -1,4 +1,5 @@
 """T035 [US2]: `resolve_trunk` precedence across worktree/workspace/default."""
+
 from __future__ import annotations
 
 from aidevkit import sync as _sync

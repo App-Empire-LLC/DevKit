@@ -1,4 +1,5 @@
 """T027 [US3]: `detect_rebase_state` interprets rebase-merge/-apply presence."""
+
 from __future__ import annotations
 
 from aidevkit import sync as _sync

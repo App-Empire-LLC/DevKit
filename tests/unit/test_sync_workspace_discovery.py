@@ -1,4 +1,5 @@
 """T011 [US1]: `find_workspace_root` ancestor-walk logic."""
+
 from __future__ import annotations
 
 import pytest
@@ -43,6 +44,7 @@ def test_no_matching_ancestor_exits_not_in_workspace(tmp_path, monkeypatch):
     with pytest.raises(typer.Exit) as exc:
         _sync.find_workspace_root(bare)
     from aidevkit.util import E_NOT_IN_WORKSPACE
+
     assert exc.value.exit_code == E_NOT_IN_WORKSPACE
 
 

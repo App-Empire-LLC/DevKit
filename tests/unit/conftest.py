@@ -1,4 +1,5 @@
 """Unit test fixtures — hermetic monkeypatch of the canonical shell seam."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

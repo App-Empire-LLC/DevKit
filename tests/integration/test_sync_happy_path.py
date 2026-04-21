@@ -1,4 +1,5 @@
 """T016 [US1]: end-to-end happy path via real git binary."""
+
 from __future__ import annotations
 
 import json

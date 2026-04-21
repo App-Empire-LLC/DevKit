@@ -4,6 +4,7 @@ Builds a self-contained fake workspace with real `git init` origins and
 worktrees, so tests can exercise the end-to-end command against the real
 `git` binary.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -138,8 +139,11 @@ def fake_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeWorks
         _git("config", "user.name", "Test", cwd=clone)
         wt_target = workspace_root / repo
         _git(
-            "worktree", "add", str(wt_target),
-            "-b", f"issue-{repo}-42",
+            "worktree",
+            "add",
+            str(wt_target),
+            "-b",
+            f"issue-{repo}-42",
             cwd=clone,
         )
         worktree_paths.append(wt_target)

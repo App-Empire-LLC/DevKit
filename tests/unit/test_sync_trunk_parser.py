@@ -1,4 +1,5 @@
 """T034 [US2]: `parse_trunk_file` grammar coverage."""
+
 from __future__ import annotations
 
 from aidevkit import sync as _sync

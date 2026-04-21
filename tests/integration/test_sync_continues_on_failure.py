@@ -1,4 +1,5 @@
 """T032 [US3]: cmd_sync must process every worktree even when one fails."""
+
 from __future__ import annotations
 
 from aidevkit import sync as _sync
@@ -20,6 +21,7 @@ def test_all_worktrees_processed_even_when_one_fails(fake_workspace, monkeypatch
     assert code == 21  # E_SYNC_PARTIAL
 
     import json as _json
+
     payload = _json.loads(capsys.readouterr().out)
     repos = [w["repo"] for w in payload["worktrees"]]
     assert repos == ["RepoA", "RepoB"]

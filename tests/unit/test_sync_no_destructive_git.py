@@ -4,6 +4,7 @@ Backs FR-013 at the source level. The module's own docstring enumerates the
 forbidden tokens — strip it before scanning so the documentation doesn't
 trigger its own test.
 """
+
 from __future__ import annotations
 
 import inspect

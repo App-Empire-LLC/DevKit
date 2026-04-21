@@ -62,6 +62,7 @@ Runs `devkit doctor` first, then symlinks `~/.claude/commands/devkit.*.md` → t
 | Command                             | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
 | `devkit bootstrap <owner/repo#N>`   | create a per-issue worktree directory                   |
+| `devkit sync`                       | fetch and rebase every worktree in the current workspace onto its trunk |
 | `devkit doctor`                     | check dependencies and environment                      |
 | `devkit setup`                      | link slash commands into `~/.claude/commands/` (runs doctor first) |
 | `devkit version`                    | show version                                            |
@@ -119,6 +120,63 @@ Show what would happen without touching anything:
 
 ```
 devkit bootstrap App-Empire-LLC/AuthService#5 --dry-run --no-ack
+```
+
+## `devkit sync`
+
+```
+devkit sync [--json] [--dry-run]
+```
+
+Run from anywhere inside a `<repo>-issue-<N>/` workspace. For each worktree
+inside the workspace (alphabetical order), sync:
+
+1. `git fetch origin`
+2. Resolve the trunk: per-worktree `TRUNK.md` > workspace `TRUNK.md` > `main`
+3. `git rebase origin/<trunk>` — on conflict, leave the worktree in
+   `rebase-in-progress` state and continue with the next worktree
+
+Conflicts are never auto-resolved. Dirty worktrees (tracked-file changes)
+are skipped with a reason — never stashed. No `git push`, no `--force*`,
+no `reset --hard` — ever.
+
+### Flags
+
+| Flag         | Effect                                                                 |
+| ------------ | ---------------------------------------------------------------------- |
+| `--json`     | Emit a single JSON document on stdout. Diagnostics remain on stderr. Schema: `importlib.resources.files("aidevkit.schemas") / "sync-output.schema.json"`. |
+| `--dry-run`  | Print the planned actions per worktree. No `git fetch`, no `git rebase`. |
+
+### Exit codes
+
+| Code | Meaning                                                            |
+| ---: | ------------------------------------------------------------------ |
+|    0 | every worktree clean (`rebased` / `fast-forwarded` / `up-to-date`) |
+|    2 | usage error                                                        |
+|   12 | dependency missing (`git` not on PATH)                             |
+|   20 | not invoked inside a workspace                                     |
+|   21 | sync completed but ≥1 worktree needs user attention                |
+
+### Example
+
+```text
+$ devkit sync
+[devkit] sync: workspace /Users/you/.app_empire_worktrees/DevKit-issue-11
+[devkit] sync: DevKit           main         rebased (3 commits replayed)
+[devkit] sync: appire_docs      main         up-to-date
+[devkit] sync: all worktrees clean.
+```
+
+### `TRUNK.md`
+
+Plain-text file containing just the trunk branch name on its own line.
+Optional `#`-prefixed comments and blank lines above are allowed. Place
+inside a single worktree to apply only to that worktree, or at the
+workspace root to apply to every worktree without its own `TRUNK.md`.
+
+```text
+# Use develop instead of main for this worktree — see ADR-042.
+develop
 ```
 
 ## Conventions

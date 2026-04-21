@@ -1,4 +1,5 @@
 """T014 [US1]: `behind_count` surface for DevKit#27 consumer."""
+
 from __future__ import annotations
 
 from pathlib import Path

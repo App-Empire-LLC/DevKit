@@ -3,6 +3,7 @@
 All subprocess work goes through `aidevkit.util.run`/`git` so tests have a
 single monkeypatch target.
 """
+
 from __future__ import annotations
 
 import inspect

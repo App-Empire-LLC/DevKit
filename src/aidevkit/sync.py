@@ -6,6 +6,7 @@ All subprocess calls go through ``aidevkit.util.run``/``git`` — do not import
 This module MUST NOT invoke ``git push``, ``git reset --hard``, ``git clean``,
 ``git branch -D``, ``git reflog expire``, or any ``--force*`` flag (FR-013).
 """
+
 from __future__ import annotations
 
 import json
@@ -84,6 +85,7 @@ class SyncReport:
 # Thin wrappers over the canonical shell seam. Keeping them here lets tests
 # monkeypatch a single target (``aidevkit.util.run``).
 
+
 def _run(cmd: list[str], *, cwd: Optional[Path] = None) -> RunResult:
     return util.run(cmd, cwd=cwd)
 
@@ -94,6 +96,7 @@ def _git(*args: str, cwd: Optional[Path] = None) -> RunResult:
 
 # ---------------------------------------------------------------------------
 # Workspace discovery (R3)
+
 
 def find_workspace_root(cwd: Path) -> Path:
     home_env = os.environ.get("APP_EMPIRE_WORKTREES_HOME")
@@ -137,6 +140,7 @@ def _has_worktree_child(path: Path) -> bool:
 
 # ---------------------------------------------------------------------------
 # Worktree enumeration
+
 
 def list_worktrees(workspace: Workspace) -> list[Worktree]:
     results: list[Worktree] = []
@@ -196,6 +200,7 @@ def resolve_trunk(worktree: Path, workspace_default: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 # Dirty detection (R1) and behind-count (R7)
 
+
 def is_dirty(worktree: Path) -> bool:
     res = _git("diff", "--quiet", "HEAD", cwd=worktree)
     if res.code == 0:
@@ -219,8 +224,7 @@ def behind_count(worktree: Path, trunk: str) -> int:
     res = _git("rev-list", "--count", f"HEAD..origin/{trunk}", cwd=worktree)
     if res.code != 0:
         log(
-            f"behind_count: git rev-list failed in {worktree} "
-            f"({res.stderr.strip()}); coercing to 0"
+            f"behind_count: git rev-list failed in {worktree} ({res.stderr.strip()}); coercing to 0"
         )
         return 0
     try:
@@ -231,6 +235,7 @@ def behind_count(worktree: Path, trunk: str) -> int:
 
 # ---------------------------------------------------------------------------
 # Clean-outcome classification (R4)
+
 
 def classify_clean_outcome(
     before_sha: str,
@@ -257,6 +262,7 @@ def _count_commits(worktree: Path, low: str, high: str) -> int:
 # ---------------------------------------------------------------------------
 # Rebase-state detection (R2) — used by US3
 
+
 def detect_rebase_state(worktree: Path) -> Literal["none", "merge", "apply"]:
     for kind in ("rebase-merge", "rebase-apply"):
         res = _git("rev-parse", "--git-path", kind, cwd=worktree)
@@ -275,6 +281,7 @@ def detect_rebase_state(worktree: Path) -> Literal["none", "merge", "apply"]:
 
 # ---------------------------------------------------------------------------
 # Per-worktree processor
+
 
 def _process_worktree(
     worktree: Worktree,
@@ -435,6 +442,7 @@ def _process_worktree(
 # ---------------------------------------------------------------------------
 # Aggregation
 
+
 def _aggregate_status(
     results: list[WorktreeResult],
 ) -> tuple[Literal["ok", "partial", "error"], int]:
@@ -449,6 +457,7 @@ def _aggregate_status(
 
 # ---------------------------------------------------------------------------
 # Rendering
+
 
 def report_to_dict(report: SyncReport) -> dict:
     return {
@@ -518,6 +527,7 @@ def _render_json(report: SyncReport) -> None:
 
 # ---------------------------------------------------------------------------
 # Orchestrator
+
 
 def cmd_sync(json_output: bool, dry_run: bool) -> int:
     cwd = Path.cwd()
