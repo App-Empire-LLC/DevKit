@@ -63,10 +63,20 @@ Runs `devkit doctor` first, then symlinks `~/.claude/commands/devkit.*.md` → t
 | ----------------------------------- | ------------------------------------------------------- |
 | `devkit bootstrap <owner/repo#N>`   | create a per-issue worktree directory                   |
 | `devkit sync`                       | fetch and rebase every worktree in the current workspace onto its trunk |
+| `devkit status [--json]`            | summarize every active per-issue workspace (issue state, branches, PRs) |
+| `devkit add-repo <name>`            | add a sibling repo's worktree to the current per-issue workspace |
+| `devkit archive <owner/repo#N>`     | post spec to issue, move workspace to `_archived/`, prune worktrees |
+| `devkit purge [--days N] [--yes]`   | delete archived workspaces older than the retention threshold |
+| `devkit preflight`                  | detect whether the current issue branch is behind `origin/main` |
 | `devkit doctor`                     | check dependencies and environment                      |
 | `devkit setup`                      | link slash commands into `~/.claude/commands/` (runs doctor first) |
+| `devkit uninstall`                  | remove DevKit: unlink slash commands and `uv tool uninstall aidevkit` |
+| `devkit update`                     | `uv tool upgrade aidevkit` then run `devkit doctor`     |
+| `devkit check-update [--json]`      | non-destructive check for a newer `aidevkit` release    |
 | `devkit version`                    | show version                                            |
 | `devkit --help`                     | show top-level help (Typer auto-generated)              |
+
+Slash-command wrappers for the workflow primitives (`bootstrap`, `sync`, `status`, `add-repo`, `archive`, `purge`, `preflight`) are installed by `devkit setup` into `~/.claude/commands/devkit.<name>.md`. The self-management commands (`uninstall`, `update`, `check-update`) have no slash wrappers — they're meant to be run outside a per-issue session.
 
 ## `devkit bootstrap`
 
