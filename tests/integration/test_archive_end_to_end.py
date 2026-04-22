@@ -149,6 +149,10 @@ def test_archive_happy_path_real_git(
     assert archived.is_dir(), "archived dir should exist"
     assert (archived / "specs" / "77-test" / "spec.md").is_file()
     assert (archived / "Upstream").is_dir()
+    marker = archived / ".devkit-archived"
+    assert marker.is_file(), "archive must drop a .devkit-archived marker"
+    import datetime as _dt
+    _dt.datetime.fromisoformat(marker.read_text().strip())
 
     # Prune should have cleaned the stale registration
     list_after = subprocess.run(
