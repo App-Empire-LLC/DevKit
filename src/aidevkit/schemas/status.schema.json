@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/App-Empire-LLC/DevKit/schemas/status.schema.json",
+  "title": "devkit status --json output",
+  "description": "Stable v1 contract for machine-readable output of `devkit status --json`. Additive changes only across patch/minor; breaking changes bump the top-level `version` integer.",
+  "type": "object",
+  "required": ["version", "workspaces"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Bumped only on breaking contract changes."
+    },
+    "workspaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workspace" }
+    }
+  },
+  "$defs": {
+    "workspace": {
+      "type": "object",
+      "required": ["dir_name", "issue", "branch", "archivable", "repos"],
+      "additionalProperties": false,
+      "properties": {
+        "dir_name": {
+          "type": "string",
+          "description": "Workspace directory name under $APP_EMPIRE_WORKTREES_HOME (e.g., 'DevKit-issue-20').",
+          "pattern": "^[A-Za-z0-9_.-]+-issue-\\d+$"
+        },
+        "issue": { "$ref": "#/$defs/issue" },
+        "branch": {
+          "type": "string",
+          "description": "The issue branch name shared across all worktrees in this workspace (e.g., 'issue-DevKit-20')."
+        },
+        "archivable": {
+          "type": "boolean",
+          "description": "True iff issue.state == 'closed' AND every repo has at least one merged PR on the branch."
+        },
+        "repos": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/repo" }
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": ["owner_repo", "number", "title", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "owner_repo": {
+          "type": "string",
+          "description": "GitHub 'owner/repo' slug."
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "description": "Empty string when state is 'unknown' and title could not be fetched."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["open", "closed", "unknown"],
+          "description": "'unknown' when GitHub was unreachable or auth failed."
+        }
+      }
+    },
+    "repo": {
+      "type": "object",
+      "required": ["name", "worktree_present", "branch_state", "prs"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "worktree_present": {
+          "type": "boolean",
+          "description": "False when the subdir is missing or its .git file is invalid (FR-STAT-006)."
+        },
+        "branch_state": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/branch_state" }
+          ],
+          "description": "null when worktree_present is false."
+        },
+        "prs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pr" },
+          "description": "PRs associated with this repo's branch. Empty array = no PRs. May be empty when GitHub is unreachable; consumers should not infer 'no PRs' from an empty array without also checking that issue.state is not 'unknown'."
+        }
+      }
+    },
+    "branch_state": {
+      "type": "object",
+      "required": ["ahead", "behind", "dirty", "missing"],
+      "additionalProperties": false,
+      "properties": {
+        "ahead": { "type": "integer", "minimum": 0 },
+        "behind": { "type": "integer", "minimum": 0 },
+        "dirty": { "type": "boolean" },
+        "missing": {
+          "type": "boolean",
+          "description": "True when the branch or its upstream has been deleted out from under the worktree."
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "required": ["number", "state", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "state": {
+          "type": "string",
+          "enum": ["open", "merged", "closed"],
+          "description": "'closed' means closed-without-merge."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    }
+  }
+}
