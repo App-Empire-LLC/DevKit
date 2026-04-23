@@ -1,6 +1,7 @@
 """Tests for the archive subcommand — resolution, PR checks, spec discovery, mv + prune."""
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -296,6 +297,22 @@ def test_move_to_archived_creates_archived_root(tmp_path: Path) -> None:
     assert (dest / "marker").read_text() == "test"
 
 
+def test_move_to_archived_writes_devkit_archived_marker(tmp_path: Path) -> None:
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    workspace = worktrees / "DevKit-issue-4"
+    workspace.mkdir()
+
+    dest = archive_mod._move_to_archived(workspace)
+    marker = dest / ".devkit-archived"
+    assert marker.is_file(), "archive must drop a .devkit-archived marker"
+    raw = marker.read_text().strip()
+    parsed = datetime.datetime.fromisoformat(raw)
+    now = datetime.datetime.now(datetime.UTC)
+    # Generous skew window — CI clocks wobble.
+    assert abs((now - parsed).total_seconds()) < 60
+
+
 def test_prune_worktrees_runs_prune_per_upstream(
     tmp_path: Path,
     subprocess_capture,
@@ -398,6 +415,9 @@ def test_happy_path_cli_exits_zero_and_moves_worktree(
     assert not workspace.exists()
     archived = workspace.parent / "_archived" / "DevKit-issue-4"
     assert archived.is_dir()
+    marker = archived / ".devkit-archived"
+    assert marker.is_file()
+    datetime.datetime.fromisoformat(marker.read_text().strip())
 
 
 def test_happy_path_dry_run_makes_no_mutations(

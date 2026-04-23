@@ -10,6 +10,7 @@ See `specs/4-archive-subcommand/spec.md` for the full specification and
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -18,6 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from ._prs import check_prs_merged as _check_prs_merged
 from .util import (
     E_ARCHIVE_COLLISION,
     E_DEP_MISSING,
@@ -186,44 +188,6 @@ def _parse_owner_repo_from_url(url: str) -> Optional[str]:
     return f"{m.group(1)}/{m.group(2)}"
 
 
-def _check_prs_merged(
-    repos: list[tuple[str, Path]],
-    branch: str,
-) -> list[str]:
-    """Return list of blocker descriptions (empty list == all merged).
-
-    A "blocker" is any PR on `branch` in any repo with state != 'MERGED'.
-    """
-    blockers: list[str] = []
-    for owner_repo, _path in repos:
-        res = gh(
-            "pr", "list",
-            "--repo", owner_repo,
-            "--head", branch,
-            "--state", "all",
-            "--json", "number,state,url",
-        )
-        if res.code != 0:
-            # Treat query failure as a blocker — we can't verify safety.
-            blockers.append(
-                f"{owner_repo} — failed to query PRs: "
-                f"{res.stderr.strip() or res.stdout.strip()}"
-            )
-            continue
-        try:
-            prs = json.loads(res.stdout or "[]")
-        except json.JSONDecodeError:
-            blockers.append(f"{owner_repo} — unparseable PR list")
-            continue
-        for pr in prs:
-            if pr.get("state") != "MERGED":
-                blockers.append(
-                    f"{owner_repo}#{pr.get('number')} ({pr.get('state')}) — "
-                    f"{pr.get('url')}"
-                )
-    return blockers
-
-
 def _find_spec_files(workspace: Path) -> list[Path]:
     """Return sorted list of `<workspace>/specs/*/spec.md` paths (one level deep)."""
     specs_dir = workspace / "specs"
@@ -345,11 +309,19 @@ def _close_issue_if_open(owner_repo: str, num: int) -> str:
 
 
 def _move_to_archived(workspace: Path) -> Path:
-    """Move `workspace` under `<home>/_archived/`. Returns the destination path."""
+    """Move `workspace` under `<home>/_archived/` and drop a `.devkit-archived` marker.
+
+    The marker is a single-line ISO 8601 UTC timestamp captured at archive
+    time. `devkit purge` reads it to age-gate deletion — missing or
+    unparseable markers cause purge to skip the directory (FR-PURGE-004a).
+    Marker-write failure propagates so archive exits non-zero (FR-ARCH-002).
+    """
     archived_root = workspace.parent / "_archived"
     archived_root.mkdir(parents=True, exist_ok=True)
     dest = archived_root / workspace.name
     shutil.move(str(workspace), str(dest))
+    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (dest / ".devkit-archived").write_text(f"{timestamp}\n")
     return dest
 
 

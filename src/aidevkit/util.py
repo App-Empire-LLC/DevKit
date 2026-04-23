@@ -29,6 +29,9 @@ E_NOT_IN_WORKSPACE = 20
 E_SYNC_PARTIAL = 21
 E_BEHIND_ORIGIN = 22
 E_PREFLIGHT_FAILED = 23
+E_NOT_IN_PER_ISSUE_WORKSPACE = 24
+E_INSTALL_NOT_UV_TOOL = 26
+E_CHECK_UPDATE_INDEX_UNAVAILABLE = 27
 
 out = Console(markup=False, highlight=False, soft_wrap=True)
 err = Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
