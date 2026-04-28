@@ -32,7 +32,7 @@ EXPECTED_HELP = """\
 │ sync          Fetch and rebase every worktree in the current workspace onto  │
 │               its trunk.                                                     │
 │ archive       Archive a completed per-issue workspace: post spec as issue    │
-│               comment, move worktree to _archived/, prune registrations.     │
+│               comment, move workspace to _archived/, prune registrations.    │
 │ preflight     Check whether the current issue branch is behind origin/main   │
 │               (detect-only; no mutation).                                    │
 │ status        Summarize every active per-issue workspace: issue state,       │

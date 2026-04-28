@@ -261,7 +261,7 @@ This is the practical resolution of the Option D collapse documented in §4.3: "
 
 **Lives in**: the workspace's scratch `.git/` only. Never pushed. Never merged. The spec branch's job is solely to satisfy SpecKit's "I'm in a feature branch" expectation; the actual code commits land on `issue-<repo>-<N>` in the worktree, not on the spec branch.
 
-**Per #36's invariant**: the spec branch never touches any per-issue worktree's git repo. The fragmenting-branch failure mode from issue #3 is structurally prevented under #36 + this design.
+**Per #36's invariant**: the spec branch never touches any per-repo worktree's git repo. The fragmenting-branch failure mode from issue #3 is structurally prevented under #36 + this design.
 
 ---
 
@@ -591,7 +591,7 @@ The isolation mechanism is **filesystem-path boundary**: each workspace has its 
 
 The `SPECIFY_FEATURE` environment variable (or its successor) is process-scoped, not workspace-scoped — if the operator launches two Claude sessions in two different sub-workspaces, each session's environment is independent. No cross-session contamination is possible at the env-var level.
 
-This decision is consistent with #36's invariant: SpecKit operates against the workspace's scratch git, never against any per-issue worktree's git. Under Option B, "the workspace" is unambiguously each sub-workspace.
+This decision is consistent with #36's invariant: SpecKit operates against the workspace's scratch git, never against any per-repo worktree's git. Under Option B, "the workspace" is unambiguously each sub-workspace.
 
 ### §17.2 Where SpecKit runs
 
@@ -646,7 +646,7 @@ The only exception: example paths inside Markdown code blocks throughout this de
 **`devkit bootstrap`** (epic case):
 
 - First run: creates the epic workspace + each sub-workspace, posts ack comments. Exit 0.
-- Re-run on same epic ref: refuses with `E_WORKTREE_EXISTS` for the epic dir. Per #14 §5.2 the epic dir creation fails first; sub-workspaces are not touched. Exit non-zero with explicit message.
+- Re-run on same epic ref: refuses with `E_WORKSPACE_EXISTS` for the epic dir. Per #14 §5.2 the epic dir creation fails first; sub-workspaces are not touched. Exit non-zero with explicit message.
 - Re-run with `--retry-children` (proposed flag, optional): epic dir untouched (the flag implies "epic dir already exists; only retry the recursive sub-bootstrap"). For each sub in `child_sub_workspaces`: if the sub dir exists, skip; if missing, bootstrap it. Idempotent.
 
 **`devkit archive`** (epic case):
@@ -751,7 +751,7 @@ The Option-A version of this case ("chained rebase: epic onto main, then subs on
 **Rationale**: Two parts:
 
 - **"Sub-issue branch falls behind epic branch"**: doesn't occur under Option B as framed. Sub branches don't track epic branches; they track main. The sub-PR's *base* is the epic branch (so PR conflict-detection runs against the epic branch's tip), but the sub-branch's *commits* sit on top of `origin/main`. When the epic branch advances (via merges from sibling subs), the sub-PR may show new "base updates" in GitHub's UI — that's normal PR behavior, not a worktree-state concern.
-- **"Spec branch in-flight"**: spec branches per §8.3 / §17.1 live only in the workspace's scratch `.git/`. They never touch the per-issue worktree's branch state. Whatever happens to the worktree's branch (rebase, force-push, anything) is invisible to the spec branch.
+- **"Spec branch in-flight"**: spec branches per §8.3 / §17.1 live only in the workspace's scratch `.git/`. They never touch any per-repo worktree's branch state. Whatever happens to a worktree's branch (rebase, force-push, anything) is invisible to the spec branch.
 
 Neither half of the case introduces new failure modes under Option B. SUPPORTED with the disclaimer that the case description's framing matches Option A's topology, not Option B's.
 

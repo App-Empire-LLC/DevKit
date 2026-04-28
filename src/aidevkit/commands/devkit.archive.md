@@ -8,7 +8,7 @@ Finalize a per-issue workspace whose PRs have merged: post the spec.md as a dura
 
 ## Usage
 
-The user will give you an issue reference in the form `owner/repo#number`, or (if they are working inside the per-issue worktree) a bare `#N` that can be inferred from the CWD:
+The user will give you an issue reference in the form `owner/repo#number`, or (if they are working inside the per-issue workspace) a bare `#N` that can be inferred from the CWD:
 
     /devkit.archive App-Empire-LLC/DevKit#4
     /devkit.archive #4
@@ -39,6 +39,6 @@ The user will give you an issue reference in the form `owner/repo#number`, or (i
 ## Notes
 
 - Archive is **never automatic**. It only runs when the user explicitly invokes this command.
-- The worktree is **moved**, not deleted. The user prunes `_archived/` manually on their own schedule.
+- The workspace is **moved**, not deleted. The user prunes `_archived/` manually on their own schedule.
 - Local `issue-<repo>-<N>` branches in the upstream repos are **left alone**. Branch cleanup is out of scope.
 - If the workspace's `specs/` directory is missing or empty, archive skips the comment step with a note and continues with the remaining cleanup — this is expected for trivial issues that skipped `/speckit.specify`.

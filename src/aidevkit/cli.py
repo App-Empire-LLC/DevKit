@@ -85,7 +85,7 @@ def sync(
 
 @app.command(
     help="Archive a completed per-issue workspace: post spec as issue comment, "
-    "move worktree to _archived/, prune registrations.",
+    "move workspace to _archived/, prune registrations.",
 )
 def archive(
     issue_arg: str = typer.Argument(

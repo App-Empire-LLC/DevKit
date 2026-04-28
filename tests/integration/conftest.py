@@ -125,9 +125,9 @@ def fake_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeWorks
         _init_origin(origin, trunks=["main", "develop", "master"])
         origins[repo] = origin
 
-    worktrees_home = tmp_path / "worktrees"
-    worktrees_home.mkdir()
-    workspace_root = worktrees_home / "RepoA-issue-42"
+    workspaces_home = tmp_path / "worktrees"
+    workspaces_home.mkdir()
+    workspace_root = workspaces_home / "RepoA-issue-42"
     workspace_root.mkdir()
     _git("init", "--initial-branch=main", cwd=workspace_root)
 
@@ -148,7 +148,7 @@ def fake_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeWorks
         )
         worktree_paths.append(wt_target)
 
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(workspaces_home))
 
     return FakeWorkspace(
         workspace_root=workspace_root,

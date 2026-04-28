@@ -25,7 +25,7 @@ The per-issue directory is the canonical place to run `claude` for an implementa
 - `~/.local/bin` on `$PATH`
 - Two environment variables:
   - `APP_EMPIRE_PROJECTS` — directory containing the source repos (DevKit adds worktrees *from* these)
-  - `APP_EMPIRE_WORKTREES_HOME` — directory where per-issue worktrees will be created
+  - `APP_EMPIRE_WORKTREES_HOME` — directory where per-issue workspaces will be created (env-var name slated for removal in #37; do not rename it locally)
 
 ## Install
 
@@ -61,7 +61,7 @@ Runs `devkit doctor` first, then symlinks `~/.claude/commands/devkit.*.md` → t
 
 | Command                             | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
-| `devkit bootstrap <owner/repo#N>`   | create a per-issue worktree directory                   |
+| `devkit bootstrap <owner/repo#N>`   | create a per-issue workspace directory                  |
 | `devkit sync`                       | fetch and rebase every worktree in the current workspace onto its trunk |
 | `devkit status [--json]`            | summarize every active per-issue workspace (issue state, branches, PRs) |
 | `devkit add-repo <name>`            | add a sibling repo's worktree to the current per-issue workspace |
@@ -107,7 +107,7 @@ If DevKit can't determine any affected repos (draft issue with no `## Affected R
 |    0 | success                                                                |
 |    2 | usage error                                                            |
 |   10 | no affected repos could be determined (draft issue, no list)           |
-|   11 | worktree directory already exists                                      |
+|   11 | workspace directory already exists                                     |
 |   12 | dependency missing (bash/git/gh/jq, or a required env var)             |
 |   13 | source repo not found at `$APP_EMPIRE_PROJECTS`                        |
 
@@ -197,21 +197,21 @@ develop
 
 ## Next session handoff
 
-When `devkit bootstrap` succeeds, it prints a `cd ... && claude` command. Running it starts a fresh Claude Code session inside the per-issue worktree — that's where Spec-Kit (`/speckit.specify`, `/speckit.plan`, etc.) should run for this issue's implementation work.
+When `devkit bootstrap` succeeds, it prints a `cd ... && claude` command. Running it starts a fresh Claude Code session inside the per-issue workspace — that's where Spec-Kit (`/speckit.specify`, `/speckit.plan`, etc.) should run for this issue's implementation work.
 
-### Claude context in per-issue worktrees (current quirk)
+### Claude context in per-issue workspaces (current quirk)
 
 Claude Code loads `CLAUDE.md` by walking **ancestors** of the cwd up to `$HOME` at session start (eager), and **lazy-loads** subdirectory `CLAUDE.md` files only when a tool first reads a file inside that subdir. See [appire_docs/tools/claude-code.md](../appire_docs/tools/claude-code.md) for the full behavior.
 
-Because DevKit places per-issue worktrees at `$APP_EMPIRE_WORKTREES_HOME/...`, which sits **outside** `$APP_EMPIRE_PROJECTS`, the ancestor walk from a worktree session never reaches `$APP_EMPIRE_PROJECTS/CLAUDE.md`. The meta-root context is not loaded at session start.
+Because DevKit places per-issue workspaces at `$APP_EMPIRE_WORKTREES_HOME/...`, which sits **outside** `$APP_EMPIRE_PROJECTS`, the ancestor walk from a workspace session never reaches `$APP_EMPIRE_PROJECTS/CLAUDE.md`. The meta-root context is not loaded at session start.
 
-**Workaround until [#2](https://github.com/App-Empire-LLC/DevKit/issues/2) lands:** launch Claude from the project subdirectory inside the worktree rather than the worktree root. That at least picks up the project's own `CLAUDE.md` eagerly via the ancestor walk:
+**Workaround until [#2](https://github.com/App-Empire-LLC/DevKit/issues/2) lands:** launch Claude from the project subdirectory inside the workspace rather than the workspace root. That at least picks up the project's own `CLAUDE.md` eagerly via the ancestor walk:
 
 ```bash
 cd $APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/<repo> && claude
 ```
 
-This does not restore the AppEmpire meta-root CLAUDE.md — that's what #2 fixes, by seeding a root CLAUDE.md at the worktree top so the ancestor walk can find it.
+This does not restore the AppEmpire meta-root CLAUDE.md — that's what #2 fixes, by seeding a root CLAUDE.md at the workspace top so the ancestor walk can find it.
 
 ## Development
 

@@ -4,17 +4,17 @@ description: Check whether the current issue branch is behind origin/main (detec
 
 # /devkit.preflight
 
-Run `devkit preflight` from the current issue worktree to find out whether the current branch is behind `origin/main` before pushing. The command fetches `origin` and computes the behind-count, then exits. It **never** rebases, merges, resets, pushes, or mutates the working tree.
+Run `devkit preflight` from the current issue workspace to find out whether the current branch is behind `origin/main` before pushing. The command fetches `origin` and computes the behind-count, then exits. It **never** rebases, merges, resets, pushes, or mutates the working tree.
 
 ## When to run
 
-- Right before `git push` from any issue worktree, especially if the branch has been in flight for more than a few hours.
+- Right before `git push` from any issue workspace, especially if the branch has been in flight for more than a few hours.
 - When resuming work on a branch after time away — quickly confirms whether `origin/main` has advanced.
 - Before opening a PR, to avoid PRs that silently include stale history.
 
 ## What to do
 
-1. Change to any directory inside the issue worktree (e.g. the worktree's repo dir).
+1. Change to any directory inside the issue workspace (e.g. one of its repo worktrees).
 2. Run:
 
        devkit preflight
