@@ -14,7 +14,7 @@ from aidevkit.util import (
     E_REPO_NOT_FOUND,
     E_REPOS_MISSING,
     E_USAGE,
-    E_WORKTREE_EXISTS,
+    E_WORKSPACE_EXISTS,
     RunResult,
 )
 
@@ -43,15 +43,15 @@ def bootstrap_env(
 ) -> dict:
     """Set up a full happy-path bootstrap environment.
 
-    Returns a dict with `projects_dir`, `worktrees_dir`, `issue_payload` (the
+    Returns a dict with `projects_dir`, `workspaces_dir`, `issue_payload` (the
     dict that gh issue-view returns by default), and the `capture` recorder.
     Pre-seeds src repos for App-Empire-LLC/DevKit and App-Empire-LLC/appire_docs
     under projects_dir (both contain a `.git` sentinel).
     """
     projects = tmp_path / "projects"
-    worktrees = tmp_path / "worktrees"
+    workspaces = tmp_path / "workspaces"
     projects.mkdir()
-    worktrees.mkdir()
+    workspaces.mkdir()
 
     for reponame in ("DevKit", "appire_docs"):
         repo_dir = projects / reponame
@@ -59,7 +59,7 @@ def bootstrap_env(
 
     monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_all_present(tmp_path))
     monkeypatch.setenv("APP_EMPIRE_PROJECTS", str(projects))
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees))
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(workspaces))
 
     payload = gh_response("issue_with_affected_repos")
     subprocess_capture.set_default(
@@ -68,7 +68,7 @@ def bootstrap_env(
 
     return {
         "projects_dir": projects,
-        "worktrees_dir": worktrees,
+        "workspaces_dir": workspaces,
         "issue_payload": payload,
         "capture": subprocess_capture,
     }
@@ -137,8 +137,8 @@ def test_flag_dry_run_skips_mutations(runner: CliRunner, bootstrap_env: dict) ->
     assert git_worktree_calls == [], "dry-run must not add worktrees"
     assert gh_comment_calls == [], "dry-run must not post ack comments"
 
-    # The worktree dir should never be created in dry-run.
-    assert not (bootstrap_env["worktrees_dir"] / "DevKit-issue-22").exists()
+    # The workspace dir should never be created in dry-run.
+    assert not (bootstrap_env["workspaces_dir"] / "DevKit-issue-22").exists()
 
 
 def test_flag_repos_override(
@@ -233,17 +233,17 @@ def test_exit_code_10_affected_repos_missing(
     assert result.exit_code == E_REPO_NOT_FOUND, result.output
 
 
-def test_exit_code_11_worktree_exists(
+def test_exit_code_11_workspace_exists(
     runner: CliRunner,
     bootstrap_env: dict,
 ) -> None:
-    workspace = bootstrap_env["worktrees_dir"] / "DevKit-issue-22"
+    workspace = bootstrap_env["workspaces_dir"] / "DevKit-issue-22"
     workspace.mkdir()
 
     result = runner.invoke(
         app, ["bootstrap", "--dry-run", "App-Empire-LLC/DevKit#22"]
     )
-    assert result.exit_code == E_WORKTREE_EXISTS, result.output
+    assert result.exit_code == E_WORKSPACE_EXISTS, result.output
 
 
 def test_exit_code_12_dep_missing(
@@ -283,7 +283,7 @@ def test_exit_code_13_source_repo_not_found(
 # as the documented exit codes; this import-level symbol makes that explicit.
 _EXIT_CODES_UNDER_TEST = (
     E_REPOS_MISSING,
-    E_WORKTREE_EXISTS,
+    E_WORKSPACE_EXISTS,
     E_DEP_MISSING,
     E_REPO_NOT_FOUND,
     E_ORIGIN_MAIN_UNAVAILABLE,
@@ -464,7 +464,7 @@ def test_bootstrap_fetch_failure_creates_nothing(
     assert git_inits == [], "git init must not run when validation fails"
     assert git_worktree_adds == [], "git worktree add must not run when validation fails"
     # And no workspace dir on disk.
-    assert not (bootstrap_env["worktrees_dir"] / "DevKit-issue-22").exists(), (
+    assert not (bootstrap_env["workspaces_dir"] / "DevKit-issue-22").exists(), (
         "workspace dir must not exist when validation fails"
     )
 
@@ -490,7 +490,7 @@ def test_bootstrap_missing_origin_main_creates_nothing(
     ]
     assert git_inits == []
     assert git_worktree_adds == []
-    assert not (bootstrap_env["worktrees_dir"] / "DevKit-issue-22").exists()
+    assert not (bootstrap_env["workspaces_dir"] / "DevKit-issue-22").exists()
 
 
 def test_bootstrap_fetch_error_message_identifies_repo(

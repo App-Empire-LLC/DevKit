@@ -12,7 +12,7 @@ from .util import (
     E_REPO_NOT_FOUND,
     E_REPOS_MISSING,
     E_USAGE,
-    E_WORKTREE_EXISTS,
+    E_WORKSPACE_EXISTS,
     die,
     gh,
     git,
@@ -189,12 +189,12 @@ def cmd_bootstrap(
     workspace = workspaces_home / f"{repo}-issue-{num}"
     if workspace.exists():
         die(
-            f"worktree dir already exists: {workspace} (archive or remove it first)",
-            code=E_WORKTREE_EXISTS,
+            f"workspace dir already exists: {workspace} (archive or remove it first)",
+            code=E_WORKSPACE_EXISTS,
         )
 
     branch = f"issue-{repo}-{num}"
-    info(f"Worktree: {workspace}")
+    info(f"Workspace: {workspace}")
     info(f"Branch:   {branch}")
     info("Repos:")
     for full in repos:
@@ -202,7 +202,7 @@ def cmd_bootstrap(
 
     if dry_run:
         info("")
-        info("[dry-run] would create worktree dir, git init, add worktrees, post ack comment")
+        info("[dry-run] would create workspace dir, git init, add worktrees, post ack comment")
         return 0
 
     workspace.mkdir(parents=True, exist_ok=False)

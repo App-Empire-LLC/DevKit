@@ -111,9 +111,9 @@ def test_archive_happy_path_real_git(
     )
 
     # Build workspace
-    worktrees_home = tmp_path / "worktrees"
-    worktrees_home.mkdir()
-    workspace = worktrees_home / "Upstream-issue-77"
+    workspaces_home = tmp_path / "worktrees"
+    workspaces_home.mkdir()
+    workspace = workspaces_home / "Upstream-issue-77"
     workspace.mkdir()
 
     # Add a worktree from upstream into workspace on branch issue-Upstream-77
@@ -129,7 +129,7 @@ def test_archive_happy_path_real_git(
     (specs_dir / "spec.md").write_text("# Integration Spec\n\nHello from integration test.\n")
 
     # Set env + patch util.run with the real subprocess pass-through
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(workspaces_home))
     monkeypatch.setattr("aidevkit.util.run", _real_run)
 
     # Precondition: worktree registered in upstream
@@ -145,7 +145,7 @@ def test_archive_happy_path_real_git(
 
     # Post-conditions
     assert not workspace.exists(), "workspace should have been moved"
-    archived = worktrees_home / "_archived" / "Upstream-issue-77"
+    archived = workspaces_home / "_archived" / "Upstream-issue-77"
     assert archived.is_dir(), "archived dir should exist"
     assert (archived / "specs" / "77-test" / "spec.md").is_file()
     assert (archived / "Upstream").is_dir()

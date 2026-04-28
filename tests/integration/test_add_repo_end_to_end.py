@@ -39,7 +39,7 @@ def test_add_repo_creates_real_git_worktree(
     )
 
     # Build the per-issue workspace
-    home = tmp_path / "worktrees_home"
+    home = tmp_path / "workspaces_home"
     home.mkdir()
     workspace = home / "DevKit-issue-77"
     workspace.mkdir()

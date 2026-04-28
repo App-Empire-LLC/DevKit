@@ -75,7 +75,7 @@ def subprocess_capture(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 @pytest.fixture
 def tmp_workspace(tmp_path: Path) -> Path:
-    """A per-test throwaway directory modeled as a per-issue worktree root."""
+    """A per-test throwaway directory modeled as a per-issue workspace root."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     return workspace

@@ -1,10 +1,10 @@
 ---
-description: Bootstrap a per-issue worktree directory for a GitHub issue
+description: Bootstrap a per-issue workspace directory for a GitHub issue
 ---
 
 # /devkit.bootstrap
 
-Create a per-issue worktree for a GitHub issue: set up the directory, git-init it, add worktrees for each affected repo on a shared branch, and post an ack comment on the issue.
+Create a per-issue workspace for a GitHub issue: set up the directory, git-init it, add worktrees for each affected repo on a shared branch, and post an ack comment on the issue.
 
 ## Usage
 
@@ -24,13 +24,13 @@ If the user gives you a bare number or a URL, ask them to confirm the `owner/rep
 
        devkit bootstrap <owner/repo#number> --repos owner/repo-a,owner/repo-b
 
-3. If the script exits with **code 11** (`worktree dir already exists`), do not attempt to delete or overwrite it. Surface the error to the user — they must decide whether to archive the existing worktree or remove it manually.
+3. If the script exits with **code 11** (`workspace dir already exists`), do not attempt to delete or overwrite it. Surface the error to the user — they must decide whether to archive the existing workspace or remove it manually.
 
 4. If the script exits with **code 13** (`source repo not found`), surface the error — the user may need to clone the missing repo into `$APP_EMPIRE_PROJECTS` first.
 
 5. If the script exits with **code 17** (`origin/main unavailable` — either the `git fetch origin` failed or `origin/main` does not exist after fetch), surface the error. The message names the affected repo. Common causes: network failure, missing/misconfigured `origin` remote, repo has been renamed, or trunk is not called `main`. Do NOT attempt to bypass by hand-creating the branch from local `main` — that reintroduces the exact stale-main bug this check exists to prevent. (Note: code 14 is `E_PRS_NOT_MERGED` used by `devkit archive`, not bootstrap.)
 
-6. On success, surface the `cd ... && claude` command the script prints at the end, so the user can start a fresh implementation session in the worktree directory.
+6. On success, surface the `cd ... && claude` command the script prints at the end, so the user can start a fresh implementation session in the workspace directory.
 
 ## Validation phase
 
@@ -43,9 +43,9 @@ This means: if bootstrap exits `14` for a multi-repo issue, **no worktrees exist
 
 ## Notes
 
-- The worktree directory is created at `$APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/`
+- The workspace directory is created at `$APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/`
 - Each affected repo gets a git worktree at `<wt_dir>/<reponame>` on branch `issue-<repo>-<N>`, based on `origin/main` at fetch time
-- The issue's home repo is always included in the worktree set (unless it's a GH draft issue with no repo at all)
+- The issue's home repo is always included in the workspace's worktree set (unless it's a GH draft issue with no repo at all)
 - An ack comment is auto-posted to the issue — pass `--no-ack` if testing and you want to skip it
 - Local `main` in each source repo is never read or mutated — bootstrap uses the remote-tracking `origin/main` directly
 - Do not try to "help" by running destructive commands if bootstrap fails. Stop, surface the error, let the user decide.

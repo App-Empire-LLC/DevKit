@@ -1,8 +1,8 @@
-"""Archive a completed per-issue worktree.
+"""Archive a completed per-issue workspace.
 
-Reads spec.md files from the worktree, posts them as comments on the target
+Reads spec.md files from the workspace, posts them as comments on the target
 GitHub issue (splitting oversized specs into multiple comments), closes the
-issue, moves the worktree directory into `_archived/`, and prunes dangling
+issue, moves the workspace directory into `_archived/`, and prunes dangling
 `git worktree` registrations in each upstream repo.
 
 See `specs/4-archive-subcommand/spec.md` for the full specification and
