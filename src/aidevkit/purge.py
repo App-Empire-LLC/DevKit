@@ -9,15 +9,12 @@ deleted (FR-PURGE-004a).
 from __future__ import annotations
 
 import datetime
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from .util import (
-    E_WORKSPACE_MISSING,
-    die,
     info,
     log,
 )
@@ -111,14 +108,8 @@ def _eligible(entry: ArchivedEntry, threshold_days: int) -> bool:
 
 
 def cmd_purge(days: int, yes: bool) -> int:
-    home_env = os.environ.get("APP_EMPIRE_WORKTREES_HOME")
-    if not home_env:
-        die("$APP_EMPIRE_WORKTREES_HOME not set (run 'devkit doctor')",
-            code=E_WORKSPACE_MISSING)
-    home = Path(home_env)
-    if not home.is_dir():
-        die(f"$APP_EMPIRE_WORKTREES_HOME is not a directory: {home_env}",
-            code=E_WORKSPACE_MISSING)
+    from . import compat
+    home = compat.get_workspaces_home()
 
     archived_root = home / "_archived"
     if not archived_root.is_dir():

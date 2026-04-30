@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import os
 import shutil
-from pathlib import Path
 
+import typer
+
+from . import config as _config
+from . import projects as _projects
 from .util import E_DEP_MISSING, err, gh, out
 
 _LABEL_WIDTH = 28
@@ -24,18 +26,6 @@ def _check_binary(name: str) -> bool:
         return True
     _fail(name, "not found in PATH")
     return False
-
-
-def _check_env_dir(var: str) -> bool:
-    val = os.environ.get(var)
-    if not val:
-        _fail(f"${var}", "not set")
-        return False
-    if not Path(val).is_dir():
-        _fail(f"${var}", f"not a directory: {val}")
-        return False
-    _ok(f"${var}", val)
-    return True
 
 
 def _check_gh_auth() -> bool:
@@ -59,6 +49,40 @@ def _extract_gh_user(text: str) -> str:
     return ""
 
 
+def _check_devkit_setup() -> bool:
+    """Resolve projects-home, validate config, parse PROJECTS.md.
+
+    Returns True if all three pass; emits one `[ok]` or `[FAIL]` line each.
+    """
+    try:
+        projects_home = _config.resolve_projects_home()
+    except typer.Exit:
+        _fail(
+            "$PROJECTS_HOME",
+            "not resolvable (set $PROJECTS_HOME or "
+            "~/.devkit/config.yaml#projects_home)",
+        )
+        return False
+    _ok("$PROJECTS_HOME", str(projects_home))
+
+    try:
+        cfg = _config.load_merged_config(projects_home)
+    except typer.Exit:
+        _fail(".devkit/config.yaml", "validation failed (see error above)")
+        return False
+    _ok(".devkit/config.yaml", f"schema v{cfg.version}, org={cfg.org}")
+
+    catalog_path = projects_home / ".devkit" / "PROJECTS.md"
+    try:
+        catalog = _projects.parse_projects_md(catalog_path)
+    except typer.Exit:
+        _fail(".devkit/PROJECTS.md", f"parse failed: {catalog_path}")
+        return False
+    _ok(".devkit/PROJECTS.md", f"{len(catalog.entries)} repo(s) catalogued")
+
+    return True
+
+
 def cmd_doctor() -> int:
     out.print("[devkit] DevKit doctor — checking dependencies and environment")
 
@@ -66,9 +90,7 @@ def cmd_doctor() -> int:
     for binary in ("bash", "git", "gh", "jq"):
         results.append(_check_binary(binary))
 
-    for var in ("APP_EMPIRE_PROJECTS", "APP_EMPIRE_WORKTREES_HOME"):
-        results.append(_check_env_dir(var))
-
+    results.append(_check_devkit_setup())
     results.append(_check_gh_auth())
 
     failed = sum(1 for ok in results if not ok)

@@ -429,11 +429,15 @@ def test_status_no_workspaces_is_not_an_error(
     assert payload == {"version": 1, "workspaces": []}
 
 
-def test_status_missing_home_env_exits_16(
+def test_status_missing_devkit_setup_exits_dep_missing(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """DevKit#37: status fails with E_DEP_MISSING (12) when .devkit/ is
+    unreachable. (Was E_WORKSPACE_MISSING/16 under the legacy
+    $APP_EMPIRE_WORKTREES_HOME check.)"""
     monkeypatch.delenv("APP_EMPIRE_WORKTREES_HOME", raising=False)
+    monkeypatch.delenv("PROJECTS_HOME", raising=False)
     monkeypatch.setattr("aidevkit.util.run", _status_shell_factory())
     result = runner.invoke(app, ["status"])
-    assert result.exit_code == 16
+    assert result.exit_code == 12  # E_DEP_MISSING

@@ -10,9 +10,9 @@ from typer.testing import CliRunner
 from aidevkit import add_repo as add_repo_mod
 from aidevkit.cli import app
 from aidevkit.util import (
+    E_DEP_MISSING,
     E_NOT_IN_PER_ISSUE_WORKSPACE,
     E_REPO_NOT_FOUND,
-    E_WORKSPACE_MISSING,
     RunResult,
 )
 
@@ -246,16 +246,18 @@ def test_add_repo_outside_workspace_exits_24(
     assert result.exit_code == E_NOT_IN_PER_ISSUE_WORKSPACE
 
 
-def test_add_repo_missing_env_exits_16(
+def test_add_repo_missing_devkit_setup_exits_dep_missing(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """DevKit#37: add-repo fails with E_DEP_MISSING when .devkit/ unreachable."""
     monkeypatch.delenv("APP_EMPIRE_WORKTREES_HOME", raising=False)
     monkeypatch.delenv("APP_EMPIRE_PROJECTS", raising=False)
+    monkeypatch.delenv("PROJECTS_HOME", raising=False)
 
     def shell(cmd: list[str], **_: object) -> RunResult:
         return RunResult(code=0, stdout="", stderr="")
 
     monkeypatch.setattr("aidevkit.util.run", shell)
     result = runner.invoke(app, ["add-repo", "Any"])
-    assert result.exit_code == E_WORKSPACE_MISSING
+    assert result.exit_code == E_DEP_MISSING
