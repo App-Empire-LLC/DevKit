@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import typer
 
 from . import __version__
@@ -7,6 +9,7 @@ from . import add_repo as _add_repo
 from . import archive as _archive
 from . import bootstrap as _bootstrap
 from . import check_update as _check_update
+from . import config as _config
 from . import doctor as _doctor
 from . import preflight as _preflight
 from . import purge as _purge
@@ -23,6 +26,56 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+# Bare ref like "DevKit#42" or just "DevKit"; expanded via `org` config.
+_BARE_REPO_RE = re.compile(r"^[^/\s#]+(?:#\d+)?$")
+
+
+def _resolve_org_lazy() -> str | None:
+    """Load `.devkit/config.yaml` once per CLI invocation and return `org`.
+
+    Returns None when the config is not resolvable — callers fall back to
+    leaving the input unchanged so the downstream parser can emit a clear
+    format error (preserving today's E_USAGE behavior for invalid inputs
+    when there's no config to consult).
+    """
+    cached = getattr(_resolve_org_lazy, "_cached", "__sentinel__")
+    if cached != "__sentinel__":
+        return cached
+    try:
+        projects_home = _config.resolve_projects_home()
+        cfg = _config.load_merged_config(projects_home)
+        _resolve_org_lazy._cached = cfg.org
+        return cfg.org
+    except typer.Exit:
+        # Config not resolvable — bare refs flow through unchanged. The
+        # subsequent format validation will catch genuinely bad input.
+        _resolve_org_lazy._cached = None
+        return None
+
+
+def _expand_bare_ref(value: str) -> str:
+    """If ``value`` is a bare repo (no ``owner/`` prefix), expand via `org`.
+
+    Used for ``bootstrap``/``archive`` issue refs and ``--repos`` entries.
+    Fully qualified references pass through unchanged. When ``org`` is
+    unavailable, the bare ref also passes through unchanged.
+    """
+    if value and _BARE_REPO_RE.match(value):
+        org = _resolve_org_lazy()
+        if org:
+            return f"{org}/{value}"
+    return value
+
+
+def _expand_repos_csv(value: str) -> str:
+    """Apply ``_expand_bare_ref`` to each comma-separated entry in --repos."""
+    if not value:
+        return value
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    expanded = [_expand_bare_ref(p) for p in parts]
+    return ",".join(expanded)
 
 
 @app.command(help="Create a per-issue workspace directory with per-repo git worktrees.")
@@ -49,6 +102,8 @@ def bootstrap(
         help="Skip posting the acknowledgement comment on the issue.",
     ),
 ) -> None:
+    issue_arg = _expand_bare_ref(issue_arg)
+    repos = _expand_repos_csv(repos)
     code = _bootstrap.cmd_bootstrap(
         issue_arg=issue_arg,
         repos_override=repos,
@@ -106,6 +161,7 @@ def archive(
         help="Print planned actions without making changes.",
     ),
 ) -> None:
+    issue_arg = _expand_bare_ref(issue_arg)
     code = _archive.cmd_archive(issue_arg=issue_arg, force=force, dry_run=dry_run)
     raise typer.Exit(code=code)
 

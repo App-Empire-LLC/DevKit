@@ -69,3 +69,42 @@ def test_version_prints_version_string(runner: CliRunner) -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert __version__ in result.output
+
+
+# --- DevKit#37 T011: org-shorthand expansion ----------------------------------
+
+def test_org_shorthand_expansion_bare_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aidevkit import cli as _cli
+    # Prime the lazy cache so we don't read real config.
+    monkeypatch.setattr(_cli._resolve_org_lazy, "_cached", "MyOrg", raising=False)
+    assert _cli._expand_bare_ref("repo#42") == "MyOrg/repo#42"
+    assert _cli._expand_bare_ref("repo") == "MyOrg/repo"
+
+
+def test_org_shorthand_expansion_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fully qualified refs are NOT expanded."""
+    from aidevkit import cli as _cli
+    monkeypatch.setattr(_cli._resolve_org_lazy, "_cached", "MyOrg", raising=False)
+    assert _cli._expand_bare_ref("Other-Org/repo#42") == "Other-Org/repo#42"
+
+
+def test_org_shorthand_expansion_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aidevkit import cli as _cli
+    monkeypatch.setattr(_cli._resolve_org_lazy, "_cached", "MyOrg", raising=False)
+    assert _cli._expand_repos_csv("a,b") == "MyOrg/a,MyOrg/b"
+    assert _cli._expand_repos_csv("Other/qualified,bare") == "Other/qualified,MyOrg/bare"
+
+
+def test_org_shorthand_falls_back_when_no_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No config = bare refs flow through unchanged. Downstream parsers
+    emit E_USAGE for unparseable inputs (preserving pre-#37 behavior)."""
+    from aidevkit import cli as _cli
+    monkeypatch.setattr(_cli._resolve_org_lazy, "_cached", None, raising=False)
+    assert _cli._expand_bare_ref("repo#42") == "repo#42"
+
+
+def test_org_shorthand_does_not_expand_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aidevkit import cli as _cli
+    monkeypatch.setattr(_cli._resolve_org_lazy, "_cached", "MyOrg", raising=False)
+    assert _cli._expand_bare_ref("") == ""
+    assert _cli._expand_repos_csv("") == ""
