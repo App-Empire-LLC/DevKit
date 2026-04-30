@@ -442,6 +442,255 @@ def test_reserved_collision_refused_pre_mutation(
     assert not (tiered_setup["workspaces_home"] / "repo-a-issue-1").exists()
 
 
+# ----- US2 acceptance scenarios (templates layering) ------------------------
+
+def test_us2_per_repo_wins(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US2 #1: identical CLAUDE.md at all 3 tiers; per-repo wins, warning
+    names the two losers."""
+    fake_home = tiered_setup["fake_home"]
+    g_ws = fake_home / ".devkit" / "templates" / "workspace"
+    g_ws.mkdir(parents=True)
+    (g_ws / "CLAUDE.md").write_text("global content")
+
+    ph_ws = tiered_setup["ph_devkit"] / "templates" / "workspace"
+    ph_ws.mkdir(parents=True)
+    (ph_ws / "CLAUDE.md").write_text("projects-home content")
+
+    repo_a_ws = tiered_setup["projects_home"] / "repo-a" / ".devkit" / "templates" / "workspace"
+    repo_a_ws.mkdir(parents=True)
+    (repo_a_ws / "CLAUDE.md").write_text("per-repo content")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    assert (workspace / "CLAUDE.md").read_text() == "per-repo content"
+    # Both losing tiers named in stderr.
+    assert "global" in result.stderr or "global" in result.output
+    assert "projects-home" in result.stderr or "projects-home" in result.output
+
+
+def test_us2_worktree_per_repo_scope(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US2 #2: global templates/worktree/.editorconfig applies to every
+    worktree; a per-repo templates/worktree/.editorconfig wins for that
+    one repo."""
+    # Add 'foo' to catalog + sources
+    foo_origin = tmp_path / "origins" / "foo.git"
+    _init_bare_origin(foo_origin)
+    _seed_source_clone(tiered_setup["projects_home"], "foo", foo_origin)
+    catalog_path = tiered_setup["ph_devkit"] / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| foo | git@github.com:TestOrg/foo.git | main | foo |\n"
+    )
+
+    # global templates/worktree/.editorconfig
+    fake_home = tiered_setup["fake_home"]
+    g_wt = fake_home / ".devkit" / "templates" / "worktree"
+    g_wt.mkdir(parents=True)
+    (g_wt / ".editorconfig").write_text("global config")
+
+    # repo-a per-repo templates/worktree/.editorconfig (overrides global)
+    repo_a_wt = tiered_setup["projects_home"] / "repo-a" / ".devkit" / "templates" / "worktree"
+    repo_a_wt.mkdir(parents=True)
+    (repo_a_wt / ".editorconfig").write_text("repo-a config")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n- TestOrg/foo\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    # repo-a's worktree gets per-repo content (more specific than global).
+    assert (workspace / "repo-a" / ".editorconfig").read_text() == "repo-a config"
+    # foo's worktree (no per-repo .devkit/) gets the global content.
+    assert (workspace / "foo" / ".editorconfig").read_text() == "global config"
+
+
+def test_us2_no_collision(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US2 #3: two per-repo tiers contributing different files (no collision)
+    — both end up at workspace root."""
+    # Add 'foo' with its own templates/workspace/Y.md
+    foo_origin = tmp_path / "origins" / "foo.git"
+    _init_bare_origin(foo_origin)
+    _seed_source_clone(tiered_setup["projects_home"], "foo", foo_origin)
+    catalog_path = tiered_setup["ph_devkit"] / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| foo | git@github.com:TestOrg/foo.git | main | foo |\n"
+    )
+
+    a_ws = tiered_setup["projects_home"] / "repo-a" / ".devkit" / "templates" / "workspace"
+    a_ws.mkdir(parents=True)
+    (a_ws / "X.md").write_text("from repo-a")
+
+    foo_ws = tiered_setup["projects_home"] / "foo" / ".devkit" / "templates" / "workspace"
+    foo_ws.mkdir(parents=True)
+    (foo_ws / "Y.md").write_text("from foo")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n- TestOrg/foo\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    assert (workspace / "X.md").read_text() == "from repo-a"
+    assert (workspace / "Y.md").read_text() == "from foo"
+
+
+def test_us2_two_per_repo_collide_later_wins(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US2 #4: two per-repo tiers contributing the same workspace path —
+    later in affected-repos order wins; warning names the loser."""
+    # Add 'foo' to catalog + sources
+    foo_origin = tmp_path / "origins" / "foo.git"
+    _init_bare_origin(foo_origin)
+    _seed_source_clone(tiered_setup["projects_home"], "foo", foo_origin)
+    catalog_path = tiered_setup["ph_devkit"] / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| foo | git@github.com:TestOrg/foo.git | main | foo |\n"
+    )
+
+    a_ws = tiered_setup["projects_home"] / "repo-a" / ".devkit" / "templates" / "workspace"
+    a_ws.mkdir(parents=True)
+    (a_ws / "Z.md").write_text("from repo-a")
+
+    foo_ws = tiered_setup["projects_home"] / "foo" / ".devkit" / "templates" / "workspace"
+    foo_ws.mkdir(parents=True)
+    (foo_ws / "Z.md").write_text("from foo")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    # Issue body order: repo-a first, foo second. So foo (later) wins.
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n- TestOrg/foo\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    assert (workspace / "Z.md").read_text() == "from foo"
+    # Warning names the loser.
+    combined = result.output + (result.stderr or "")
+    assert "repo:TestOrg/repo-a" in combined or "repo-a" in combined
+
+
+# ----- US3 acceptance scenarios (per-repo tier scope) ------------------------
+
+def test_us3_per_repo_isolation(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US3 #1: per-repo templates/worktree/A-only.md lands ONLY in that
+    repo's worktree, not siblings."""
+    # Add 'foo' to catalog + sources
+    foo_origin = tmp_path / "origins" / "foo.git"
+    _init_bare_origin(foo_origin)
+    _seed_source_clone(tiered_setup["projects_home"], "foo", foo_origin)
+    catalog_path = tiered_setup["ph_devkit"] / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| foo | git@github.com:TestOrg/foo.git | main | foo |\n"
+    )
+
+    a_wt = tiered_setup["projects_home"] / "repo-a" / ".devkit" / "templates" / "worktree"
+    a_wt.mkdir(parents=True)
+    (a_wt / "A-only.md").write_text("only in A")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n- TestOrg/foo\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    assert (workspace / "repo-a" / "A-only.md").is_file()
+    assert not (workspace / "foo" / "A-only.md").exists()
+
+
+def test_us3_per_repo_not_consulted_when_not_in_workspace(
+    runner: CliRunner,
+    tiered_setup: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """US3 #2: per-repo templates/workspace/X.md does NOT land anywhere
+    when that repo isn't an affected repo of the workspace."""
+    # Add 'foo' to catalog + sources, with its own template
+    foo_origin = tmp_path / "origins" / "foo.git"
+    _init_bare_origin(foo_origin)
+    _seed_source_clone(tiered_setup["projects_home"], "foo", foo_origin)
+    catalog_path = tiered_setup["ph_devkit"] / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| foo | git@github.com:TestOrg/foo.git | main | foo |\n"
+    )
+    foo_ws = tiered_setup["projects_home"] / "foo" / ".devkit" / "templates" / "workspace"
+    foo_ws.mkdir(parents=True)
+    (foo_ws / "foo-says-hi.md").write_text("hi from foo")
+
+    monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_real_git(tmp_path))
+    # Only repo-a in affected — foo not consulted.
+    _mock_gh(monkeypatch, {
+        "title": "T",
+        "body": "## Affected Repos\n\n- TestOrg/repo-a\n",
+        "url": "https://github.com/TestOrg/repo-a/issues/1",
+    })
+
+    result = runner.invoke(app, ["bootstrap", "--no-ack", "TestOrg/repo-a#1"])
+    assert result.exit_code == 0, result.output
+
+    workspace = tiered_setup["workspaces_home"] / "repo-a-issue-1"
+    # The foo template did not land anywhere.
+    assert not (workspace / "foo-says-hi.md").exists()
+    assert not list(workspace.rglob("foo-says-hi.md"))
+
+
 # ----- WORKSPACE.md frontmatter integration check ---------------------------
 
 def test_workspace_md_template_stamp_sha_present(

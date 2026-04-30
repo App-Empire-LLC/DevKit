@@ -10,6 +10,7 @@ from aidevkit.templates import (
     TemplateTier,
     apply_stamp_plan,
     discover_tiers,
+    log_overrides,
     plan_stamp,
 )
 
@@ -360,7 +361,29 @@ def test_apply_preserves_executable_bit(tmp_path: Path) -> None:
     assert mode == 0o755
 
 
-def test_apply_emits_override_warning(
+def test_log_overrides_emits_warnings(
+    tmp_path: Path, capsys: __import__("pytest").CaptureFixture
+) -> None:
+    """log_overrides() emits one warn line per override; apply_stamp_plan
+    is silent (caller controls when warnings surface)."""
+    ws_g = _seed(tmp_path / "g", {"X.md": "global"})
+    ws_ph = _seed(tmp_path / "ph", {"X.md": "ph"})
+    plan = plan_stamp(
+        [
+            _tier(GLOBAL_TIER_LABEL, ws_root=ws_g),
+            _tier(PROJECTS_HOME_TIER_LABEL, ws_root=ws_ph),
+        ],
+        affected_repo_names=["a"],
+    )
+    log_overrides(plan)
+    captured = capsys.readouterr()
+    assert "warn" in captured.err.lower()
+    assert "X.md" in captured.err
+    assert GLOBAL_TIER_LABEL in captured.err
+    assert PROJECTS_HOME_TIER_LABEL in captured.err
+
+
+def test_apply_does_not_log_warnings(
     tmp_path: Path, capsys: __import__("pytest").CaptureFixture
 ) -> None:
     ws_g = _seed(tmp_path / "g", {"X.md": "global"})
@@ -374,9 +397,40 @@ def test_apply_emits_override_warning(
     )
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    apply_stamp_plan(plan, workspace)
+    apply_stamp_plan(plan, workspace, affected_repo_names=["a"])
     captured = capsys.readouterr()
-    assert "warn" in captured.err.lower()
-    assert "X.md" in captured.err
-    assert GLOBAL_TIER_LABEL in captured.err
-    assert PROJECTS_HOME_TIER_LABEL in captured.err
+    # apply() doesn't log; only log_overrides() does.
+    assert captured.err == ""
+
+
+def test_apply_workspace_phase_skips_worktree_files(tmp_path: Path) -> None:
+    """phase='workspace' applies only files outside any <repo>/ subdir."""
+    ws_g = _seed(tmp_path / "g_ws", {"R.md": "root"})
+    wt_g = _seed(tmp_path / "g_wt", {"in.md": "in worktree"})
+    plan = plan_stamp(
+        [_tier(GLOBAL_TIER_LABEL, ws_root=ws_g, wt_root=wt_g)],
+        affected_repo_names=["a"],
+    )
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    apply_stamp_plan(
+        plan, workspace, affected_repo_names=["a"], phase="workspace"
+    )
+    assert (workspace / "R.md").is_file()
+    assert not (workspace / "a" / "in.md").exists()
+
+
+def test_apply_worktree_phase_skips_workspace_files(tmp_path: Path) -> None:
+    ws_g = _seed(tmp_path / "g_ws", {"R.md": "root"})
+    wt_g = _seed(tmp_path / "g_wt", {"in.md": "in worktree"})
+    plan = plan_stamp(
+        [_tier(GLOBAL_TIER_LABEL, ws_root=ws_g, wt_root=wt_g)],
+        affected_repo_names=["a"],
+    )
+    workspace = tmp_path / "ws"
+    (workspace / "a").mkdir(parents=True)
+    apply_stamp_plan(
+        plan, workspace, affected_repo_names=["a"], phase="worktree"
+    )
+    assert not (workspace / "R.md").exists()
+    assert (workspace / "a" / "in.md").is_file()

@@ -277,17 +277,47 @@ def _compute_template_stamp_sha(
     return h.hexdigest()
 
 
-def apply_stamp_plan(plan: StampPlan, workspace: Path) -> None:
-    """Copy each plan item to its destination. Does NOT handle reserved
-    collisions — caller must check ``plan.collisions_with_reserved`` and
-    fail before reaching here.
-
-    Emits a ``[devkit] warn:`` line per override.
-    """
+def log_overrides(plan: StampPlan) -> None:
+    """Emit one ``[devkit] warn:`` line per resolved-by-override entry."""
     for relpath, winner, loser in plan.overrides_log:
         log(f"warn: template {relpath} from {winner} overrides {loser}")
 
+
+def apply_stamp_plan(
+    plan: StampPlan,
+    workspace: Path,
+    *,
+    affected_repo_names: list[str] | None = None,
+    phase: str = "all",
+) -> None:
+    """Copy plan items to their destinations.
+
+    The ``phase`` parameter controls which items are copied:
+
+    - ``"workspace"``: only workspace-root targets (no <repo>/ prefix).
+      Run BEFORE ``git worktree add`` so workspace-root templates are
+      in place when the workspace is first inspected.
+    - ``"worktree"``: only items targeted at a worktree subdirectory.
+      Run AFTER ``git worktree add`` so the worktree dir exists.
+    - ``"all"``: both, in one pass. Suitable when worktrees already
+      exist (e.g., idempotent re-stamping).
+
+    The function does NOT log override warnings — call
+    :func:`log_overrides` separately, once.
+
+    Caller must check ``plan.collisions_with_reserved`` separately and
+    fail before invoking this function.
+    """
+    repo_set = set(affected_repo_names or [])
+
     for copy in plan.copies:
+        first_segment = copy.destination.parts[0] if copy.destination.parts else ""
+        is_worktree_target = first_segment in repo_set
+        if phase == "workspace" and is_worktree_target:
+            continue
+        if phase == "worktree" and not is_worktree_target:
+            continue
+
         dest = workspace / copy.destination
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Use copy2 to preserve mode bits.

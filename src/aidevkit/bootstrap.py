@@ -324,10 +324,18 @@ def cmd_bootstrap(
         _workspace.stamp_trunk_md(workspace, trunk_branch)
         _workspace.stamp_projects_md(workspace, catalog.raw_text)
 
-        # Phase 2c: stamp templates
-        _templates.apply_stamp_plan(plan, workspace)
+        # Phase 2c: stamp workspace-root templates (before worktrees, so the
+        # workspace root is fully populated when first inspected).
+        _templates.log_overrides(plan)
+        _templates.apply_stamp_plan(
+            plan,
+            workspace,
+            affected_repo_names=affected_repo_names,
+            phase="workspace",
+        )
 
-        # Phase 2d: add worktrees
+        # Phase 2d: add worktrees (must happen before worktree-template apply
+        # since `git worktree add` requires the destination dir not to exist).
         for entry in repos:
             src = projects_home / entry.name
             wt_target = workspace / entry.name
@@ -344,6 +352,14 @@ def cmd_bootstrap(
                     f"git worktree add failed for {owner_repo}: {detail}",
                     code=1,
                 )
+
+        # Phase 2e: stamp worktree templates (now that worktree dirs exist).
+        _templates.apply_stamp_plan(
+            plan,
+            workspace,
+            affected_repo_names=affected_repo_names,
+            phase="worktree",
+        )
     except Exception:
         shutil.rmtree(workspace, ignore_errors=True)
         raise
