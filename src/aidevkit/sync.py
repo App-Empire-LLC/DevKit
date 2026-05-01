@@ -10,7 +10,6 @@ This module MUST NOT invoke ``git push``, ``git reset --hard``, ``git clean``,
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -99,8 +98,18 @@ def _git(*args: str, cwd: Optional[Path] = None) -> RunResult:
 
 
 def find_workspace_root(cwd: Path) -> Path:
-    home_env = os.environ.get("APP_EMPIRE_WORKTREES_HOME")
-    home = Path(home_env).resolve() if home_env else None
+    """Walk up from `cwd` until we find a `<repo>-issue-<N>` dir with at
+    least one worktree child. The walk stops at `workspaces_home` if that
+    directory is on the path; otherwise it terminates at filesystem root.
+
+    DevKit#37: workspaces_home comes from `.devkit/config.yaml`. When the
+    config can't be resolved (legacy/unconfigured environment), the walk
+    falls back to filesystem-root termination."""
+    try:
+        from . import compat
+        home: Optional[Path] = compat.get_workspaces_home().resolve()
+    except typer.Exit:
+        home = None
 
     cwd = cwd.resolve()
     candidate: Optional[Path] = cwd
@@ -116,7 +125,7 @@ def find_workspace_root(cwd: Path) -> Path:
 
     util.die(
         f"not inside a recognized workspace (cwd={cwd}). "
-        f"cd into $APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/ first.",
+        f"cd into <workspaces_home>/<repo>-issue-<N>/ first.",
         code=E_NOT_IN_WORKSPACE,
     )
     # die() raises typer.Exit; this is unreachable.

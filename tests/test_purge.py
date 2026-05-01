@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from aidevkit import purge as purge_mod
 from aidevkit.cli import app
-from aidevkit.util import E_WORKSPACE_MISSING
+from aidevkit.util import E_DEP_MISSING
 
 
 @pytest.fixture
@@ -228,10 +228,12 @@ def test_purge_never_touches_active_workspaces(
     assert not old.exists()
 
 
-def test_purge_missing_env_exits_16(
+def test_purge_missing_devkit_setup_exits_dep_missing(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """DevKit#37: purge fails with E_DEP_MISSING when .devkit/ unreachable."""
     monkeypatch.delenv("APP_EMPIRE_WORKTREES_HOME", raising=False)
+    monkeypatch.delenv("PROJECTS_HOME", raising=False)
     result = runner.invoke(app, ["purge"])
-    assert result.exit_code == E_WORKSPACE_MISSING
+    assert result.exit_code == E_DEP_MISSING

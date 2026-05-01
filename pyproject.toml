@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aidevkit"
-version = "0.3.0"
+version = "0.4.0"
 description = "Companion tooling for GitHub Spec-Kit — per-issue git worktrees, Claude Code slash commands, and workflow helpers."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
     "rich>=13",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

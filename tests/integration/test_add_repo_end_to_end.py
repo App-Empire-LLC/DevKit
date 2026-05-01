@@ -44,8 +44,25 @@ def test_add_repo_creates_real_git_worktree(
     workspace = home / "DevKit-issue-77"
     workspace.mkdir()
 
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(home))
-    monkeypatch.setenv("APP_EMPIRE_PROJECTS", str(projects))
+    # DevKit#37: seed .devkit/ at projects-home so the new resolver works.
+    devkit_dir = projects / ".devkit"
+    devkit_dir.mkdir()
+    (devkit_dir / "config.yaml").write_text(
+        f"version: 1\norg: TestOrg\nworkspaces_home: {home}\n"
+    )
+    (devkit_dir / "PROJECTS.md").write_text(
+        "# Projects\n\n"
+        "| name | git_url | description |\n|------|---------|-------------|\n"
+        "| AuthService | git@github.com:TestOrg/AuthService.git | x |\n"
+    )
+    fake_home = tmp_path / "_fake_home"
+    fake_home.mkdir()
+    monkeypatch.setenv("PROJECTS_HOME", str(projects))
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(
+        "aidevkit.config._GLOBAL_CONFIG_PATH",
+        fake_home / ".devkit" / "config.yaml",
+    )
     monkeypatch.chdir(workspace)
     monkeypatch.setattr("aidevkit.util.run", _real_run)
 

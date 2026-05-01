@@ -128,8 +128,26 @@ def test_archive_happy_path_real_git(
     specs_dir.mkdir(parents=True)
     (specs_dir / "spec.md").write_text("# Integration Spec\n\nHello from integration test.\n")
 
-    # Set env + patch util.run with the real subprocess pass-through
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(workspaces_home))
+    # DevKit#37: seed .devkit/ for the new workspaces_home resolver.
+    ph = tmp_path / "projects_home"
+    ph.mkdir()
+    devkit_dir = ph / ".devkit"
+    devkit_dir.mkdir()
+    (devkit_dir / "config.yaml").write_text(
+        f"version: 1\norg: App-Empire-LLC\nworkspaces_home: {workspaces_home}\n"
+    )
+    (devkit_dir / "PROJECTS.md").write_text(
+        "# Projects\n\n| name | git_url | description |\n|------|---------|-------------|\n"
+        "| Upstream | git@github.com:App-Empire-LLC/Upstream.git | x |\n"
+    )
+    fake_home = tmp_path / "_fake_home"
+    fake_home.mkdir()
+    monkeypatch.setenv("PROJECTS_HOME", str(ph))
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(
+        "aidevkit.config._GLOBAL_CONFIG_PATH",
+        fake_home / ".devkit" / "config.yaml",
+    )
     monkeypatch.setattr("aidevkit.util.run", _real_run)
 
     # Precondition: worktree registered in upstream

@@ -48,7 +48,26 @@ def test_purge_mixed_marker_states_real_fs(
     active = home / "Active-issue-1"
     active.mkdir()
 
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(home))
+    # DevKit#37: seed .devkit/ for the new workspaces_home resolver.
+    ph = tmp_path / "projects_home"
+    ph.mkdir()
+    devkit_dir = ph / ".devkit"
+    devkit_dir.mkdir()
+    (devkit_dir / "config.yaml").write_text(
+        f"version: 1\norg: TestOrg\nworkspaces_home: {home}\n"
+    )
+    (devkit_dir / "PROJECTS.md").write_text(
+        "# Projects\n\n| name | git_url | description |\n|------|---------|-------------|\n"
+        "| placeholder | git@github.com:TestOrg/placeholder.git | x |\n"
+    )
+    fake_home = tmp_path / "_fake_home"
+    fake_home.mkdir()
+    monkeypatch.setenv("PROJECTS_HOME", str(ph))
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(
+        "aidevkit.config._GLOBAL_CONFIG_PATH",
+        fake_home / ".devkit" / "config.yaml",
+    )
     monkeypatch.setattr("aidevkit.util.run", _real_run)
 
     exit_code = purge_mod.cmd_purge(days=30, yes=True)

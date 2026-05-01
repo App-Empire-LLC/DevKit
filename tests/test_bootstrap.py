@@ -43,23 +43,54 @@ def bootstrap_env(
 ) -> dict:
     """Set up a full happy-path bootstrap environment.
 
-    Returns a dict with `projects_dir`, `workspaces_dir`, `issue_payload` (the
-    dict that gh issue-view returns by default), and the `capture` recorder.
-    Pre-seeds src repos for App-Empire-LLC/DevKit and App-Empire-LLC/appire_docs
-    under projects_dir (both contain a `.git` sentinel).
+    Returns a dict with `projects_dir`, `workspaces_dir`, `issue_payload`,
+    and the `capture` recorder. Seeds:
+    - $PROJECTS_HOME/.devkit/config.yaml  (version, org, workspaces_home)
+    - $PROJECTS_HOME/.devkit/PROJECTS.md  (DevKit + appire_docs catalog rows)
+    - $PROJECTS_HOME/DevKit/.git/         (source clone sentinel)
+    - $PROJECTS_HOME/appire_docs/.git/    (source clone sentinel)
+    Sets PROJECTS_HOME, points HOME at an empty dir (no global .devkit/).
     """
     projects = tmp_path / "projects"
     workspaces = tmp_path / "workspaces"
+    fake_home = tmp_path / "fake-home"
     projects.mkdir()
     workspaces.mkdir()
+    fake_home.mkdir()
 
     for reponame in ("DevKit", "appire_docs"):
         repo_dir = projects / reponame
         (repo_dir / ".git").mkdir(parents=True)
 
+    devkit_dir = projects / ".devkit"
+    devkit_dir.mkdir()
+    (devkit_dir / "config.yaml").write_text(
+        f"version: 1\norg: App-Empire-LLC\nworkspaces_home: {workspaces}\n"
+    )
+    (devkit_dir / "PROJECTS.md").write_text(
+        "# Projects\n\n"
+        "| name | git_url | default_branch | description |\n"
+        "|------|---------|----------------|-------------|\n"
+        "| DevKit | git@github.com:App-Empire-LLC/DevKit.git | main | DevKit |\n"
+        "| appire_docs | git@github.com:App-Empire-LLC/appire_docs.git "
+        "| main | Docs |\n"
+    )
+
     monkeypatch.setattr("aidevkit.bootstrap.shutil.which", _which_all_present(tmp_path))
-    monkeypatch.setenv("APP_EMPIRE_PROJECTS", str(projects))
-    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(workspaces))
+    monkeypatch.setenv("PROJECTS_HOME", str(projects))
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: fake_home))
+    # Reset the cli.py org-shorthand cache between tests.
+    from aidevkit import cli as _cli
+    if hasattr(_cli._resolve_org_lazy, "_cached"):
+        delattr(_cli._resolve_org_lazy, "_cached")
+    # Reset the global config path module-level constant for hermetic resolution.
+    monkeypatch.setattr(
+        "aidevkit.config._GLOBAL_CONFIG_PATH",
+        fake_home / ".devkit" / "config.yaml",
+    )
+    # Drop legacy env vars so nothing accidentally reads them.
+    monkeypatch.delenv("APP_EMPIRE_PROJECTS", raising=False)
+    monkeypatch.delenv("APP_EMPIRE_WORKTREES_HOME", raising=False)
 
     payload = gh_response("issue_with_affected_repos")
     subprocess_capture.set_default(
@@ -83,7 +114,9 @@ def bootstrap_env(
         ("App-Empire-LLC/DevKit#22", True),
         ("owner/repo-name#1", True),
         ("a/b#12345", True),
-        ("DevKit#22", False),
+        # DevKit#37 FR-005a: bare 'DevKit#22' is valid — expanded via the
+        # `org` config field. The bootstrap_env fixture sets org=App-Empire-LLC.
+        ("DevKit#22", True),
         ("owner/repo", False),
         ("owner/repo#", False),
         ("", False),
@@ -141,14 +174,22 @@ def test_flag_dry_run_skips_mutations(runner: CliRunner, bootstrap_env: dict) ->
     assert not (bootstrap_env["workspaces_dir"] / "DevKit-issue-22").exists()
 
 
-def test_flag_repos_override(
+def test_flag_repos_additive(
     runner: CliRunner,
     bootstrap_env: dict,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    # Add another source repo so --repos has somewhere to point.
+    """DevKit#37 FR-018a: --repos is additive, not override.
+    Issue body lists DevKit + appire_docs; --repos adds OtherRepo on top."""
+    # Add another source repo + catalog row so --repos has somewhere to point.
     (bootstrap_env["projects_dir"] / "OtherRepo" / ".git").mkdir(parents=True)
+    catalog_path = bootstrap_env["projects_dir"] / ".devkit" / "PROJECTS.md"
+    catalog_path.write_text(
+        catalog_path.read_text()
+        + "| OtherRepo | git@github.com:App-Empire-LLC/OtherRepo.git "
+        "| main | other |\n"
+    )
 
     result = runner.invoke(
         app,
@@ -162,10 +203,10 @@ def test_flag_repos_override(
     )
 
     assert result.exit_code == 0, result.output
-    assert "using --repos override" in result.output
-    assert "OtherRepo" in result.output
-    # DevKit (issue home) is always auto-added when --repos is used.
+    # Both issue-body repos AND the --repos addition are present.
     assert "App-Empire-LLC/DevKit" in result.output
+    assert "App-Empire-LLC/appire_docs" in result.output
+    assert "App-Empire-LLC/OtherRepo" in result.output
 
 
 def test_flag_no_ack_skips_comment(runner: CliRunner, bootstrap_env: dict) -> None:
@@ -197,39 +238,24 @@ def test_flag_no_ack_skips_comment(runner: CliRunner, bootstrap_env: dict) -> No
 # --- T016: exit code paths ---------------------------------------------------
 
 
-def test_exit_code_10_affected_repos_missing(
+def test_exit_code_13_repo_not_in_catalog(
     runner: CliRunner,
     bootstrap_env: dict,
     gh_response,
 ) -> None:
-    # Override the canned gh response to a body with no Affected Repos section.
-    # Issue home repo is in a fake unknown owner so it isn't auto-included and
-    # no resolvable repos remain; appire_docs is also missing from projects_dir.
+    """DevKit#37 FR-010: an issue home repo that's not in PROJECTS.md
+    must refuse with E_REPO_NOT_FOUND (formerly tested as the 'no affected
+    repos' path under #27)."""
     minimal = gh_response("issue_minimal")
+    # Issue home is some-other-owner/UnknownRepo — not in the catalog.
+    minimal["url"] = "https://github.com/some-other-owner/UnknownRepo/issues/999"
     bootstrap_env["capture"].set_default(
         RunResult(code=0, stdout=json.dumps(minimal), stderr="")
     )
 
-    # Rebuild projects_dir with no recognized repos.
-    projects = bootstrap_env["projects_dir"]
-    for child in list(projects.iterdir()):
-        if child.is_dir():
-            import shutil as _sh
-            _sh.rmtree(child)
-
     result = runner.invoke(
-        app, ["bootstrap", "--dry-run", "App-Empire-LLC/DevKit#999"]
+        app, ["bootstrap", "--dry-run", "some-other-owner/UnknownRepo#999"]
     )
-    # With no source dirs, either no-repos (10) or repo-not-found (13) fires first.
-    # The sequence is: resolve_affected_repos → verify_source_repos. With a
-    # minimal body but home repo auto-included, verify_source_repos fails
-    # first with 13. To reliably hit 10 we need to also override --repos to
-    # an empty set — but the CLI adds the home repo unconditionally. The
-    # pure path to exit 10 is when _resolve_affected_repos returns []; that
-    # requires both override-empty AND issue-home-already-absent, which the
-    # code guards against. So this test instead exercises the closely-related
-    # "no affected repos listed and home repo not on disk" scenario that
-    # surfaces as E_REPO_NOT_FOUND — still validating the missing-repos path.
     assert result.exit_code == E_REPO_NOT_FOUND, result.output
 
 

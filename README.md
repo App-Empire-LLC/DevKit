@@ -9,12 +9,16 @@ Per-issue git worktrees, Claude Code slash commands, and workflow helpers built 
 
 DevKit takes a GitHub issue and produces a clean per-issue workspace:
 
-- A dedicated directory at `$APP_EMPIRE_WORKTREES_HOME/<repo>-issue-<N>/`
+- A dedicated directory at `<workspaces_home>/<repo>-issue-<N>/` (where `<workspaces_home>` comes from your `.devkit/config.yaml`)
 - `git init` inside it (so Spec-Kit has a repo to write artifacts into)
 - One `git worktree` per affected repo, all on a shared branch `issue-<repo>-<N>`
+- Three reserved files at the workspace root: `WORKSPACE.md`, `TRUNK.md`, `PROJECTS.md`
+- Templates layered from `.devkit/templates/` (global / projects-home / per-repo, most-specific wins)
 - An auto-posted ack comment on the GH issue
 
 The per-issue directory is the canonical place to run `claude` for an implementation session. Spec-Kit artifacts, multiple repo worktrees, and any scratch files live side-by-side — when the work is done, archive the whole directory.
+
+The workspace model and `.devkit/` schema are documented in [`appire_docs/docs/workflows/devkit-workspaces.md`](../appire_docs/docs/workflows/devkit-workspaces.md) — the canonical operating reference.
 
 ## Requirements
 
@@ -23,9 +27,7 @@ The per-issue directory is the canonical place to run `claude` for an implementa
 - `bash`, `git`, `gh`, `jq` on PATH
 - `gh auth login` completed
 - `~/.local/bin` on `$PATH`
-- Two environment variables:
-  - `APP_EMPIRE_PROJECTS` — directory containing the source repos (DevKit adds worktrees *from* these)
-  - `APP_EMPIRE_WORKTREES_HOME` — directory where per-issue workspaces will be created (env-var name slated for removal in #37; do not rename it locally)
+- A configured `.devkit/`. Either set `$PROJECTS_HOME` to a directory containing `.devkit/config.yaml`, or add a `projects_home: /abs/path` field to `~/.devkit/config.yaml`. The projects-home `.devkit/` MUST contain a `config.yaml` and `PROJECTS.md` — see [`appire_docs/docs/workflows/devkit-workspaces.md`](../appire_docs/docs/workflows/devkit-workspaces.md) for the schema.
 
 ## Install
 
@@ -109,7 +111,7 @@ If DevKit can't determine any affected repos (draft issue with no `## Affected R
 |   10 | no affected repos could be determined (draft issue, no list)           |
 |   11 | workspace directory already exists                                     |
 |   12 | dependency missing (bash/git/gh/jq, or a required env var)             |
-|   13 | source repo not found at `$APP_EMPIRE_PROJECTS`                        |
+|   13 | source repo not found, or affected repo not in `PROJECTS.md`           |
 
 ### Examples
 

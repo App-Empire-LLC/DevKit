@@ -9,7 +9,6 @@ exits 0.
 """
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,7 +17,6 @@ from typing import Optional
 from .util import (
     E_NOT_IN_PER_ISSUE_WORKSPACE,
     E_REPO_NOT_FOUND,
-    E_WORKSPACE_MISSING,
     die,
     git,
     info,
@@ -62,7 +60,7 @@ def _detect_per_issue_context(cwd: Path, home: Path) -> PerIssueContext:
         current = parent
     die(
         f"not inside a per-issue workspace (cwd={cwd_resolved}). "
-        f"cd into $APP_EMPIRE_WORKTREES_HOME/<Repo>-issue-<N>/ first.",
+        f"cd into <workspaces_home>/<Repo>-issue-<N>/ first.",
         code=E_NOT_IN_PER_ISSUE_WORKSPACE,
     )
     # unreachable
@@ -139,22 +137,8 @@ def _ensure_worktree(source_repo: Path, target_path: Path, branch: str) -> bool:
 
 
 def cmd_add_repo(repo_name: str) -> int:
-    home_env = os.environ.get("APP_EMPIRE_WORKTREES_HOME")
-    projects_env = os.environ.get("APP_EMPIRE_PROJECTS")
-    if not home_env or not projects_env:
-        die(
-            "$APP_EMPIRE_WORKTREES_HOME and $APP_EMPIRE_PROJECTS must both "
-            "be set (run 'devkit doctor')",
-            code=E_WORKSPACE_MISSING,
-        )
-    home = Path(home_env)
-    projects = Path(projects_env)
-    if not home.is_dir():
-        die(f"$APP_EMPIRE_WORKTREES_HOME is not a directory: {home_env}",
-            code=E_WORKSPACE_MISSING)
-    if not projects.is_dir():
-        die(f"$APP_EMPIRE_PROJECTS is not a directory: {projects_env}",
-            code=E_WORKSPACE_MISSING)
+    from . import compat
+    projects, home = compat.get_projects_and_workspaces_homes()
 
     ctx = _detect_per_issue_context(Path.cwd(), home)
     source = _resolve_source_repo(repo_name, projects)

@@ -14,7 +14,6 @@ from __future__ import annotations
 import concurrent.futures
 import dataclasses
 import json
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,8 +21,6 @@ from typing import Literal, Optional
 
 from ._prs import PR, prs_for_branch
 from .util import (
-    E_WORKSPACE_MISSING,
-    die,
     gh,
     git,
     info,
@@ -70,15 +67,9 @@ class Workspace:
 
 
 def _home() -> Path:
-    home = os.environ.get("APP_EMPIRE_WORKTREES_HOME")
-    if not home:
-        die("$APP_EMPIRE_WORKTREES_HOME not set (run 'devkit doctor')",
-            code=E_WORKSPACE_MISSING)
-    home_path = Path(home)
-    if not home_path.is_dir():
-        die(f"$APP_EMPIRE_WORKTREES_HOME is not a directory: {home}",
-            code=E_WORKSPACE_MISSING)
-    return home_path.resolve()
+    """Resolve workspaces_home via .devkit/config.yaml (DevKit#37)."""
+    from . import compat
+    return compat.get_workspaces_home().resolve()
 
 
 def _enumerate_workspaces(home: Path) -> list[Path]:
@@ -336,7 +327,7 @@ def _repo_to_dict(r: RepoStatus) -> dict:
 
 def _render_text(workspaces: list[Workspace]) -> None:
     if not workspaces:
-        info("no active workspaces found under $APP_EMPIRE_WORKTREES_HOME")
+        info("no active workspaces found under workspaces_home")
         return
     for w in workspaces:
         archivable_tag = " [archivable]" if w.archivable else ""

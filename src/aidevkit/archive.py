@@ -48,17 +48,11 @@ def _check_deps() -> None:
         if shutil.which(binary) is None:
             die(f"{binary} not found in PATH (run 'devkit doctor')", code=E_DEP_MISSING)
 
-    if not os.environ.get("APP_EMPIRE_WORKTREES_HOME"):
-        die(
-            "$APP_EMPIRE_WORKTREES_HOME not set (run 'devkit doctor')",
-            code=E_DEP_MISSING,
-        )
-    if not Path(os.environ["APP_EMPIRE_WORKTREES_HOME"]).is_dir():
-        die(
-            f"$APP_EMPIRE_WORKTREES_HOME does not point at a directory: "
-            f"{os.environ['APP_EMPIRE_WORKTREES_HOME']}",
-            code=E_DEP_MISSING,
-        )
+
+def _workspaces_home() -> Path:
+    """DevKit#37: workspaces_home from .devkit/config.yaml."""
+    from . import compat
+    return compat.get_workspaces_home()
 
 
 def _parse_issue_ref(issue_arg: str) -> tuple[Optional[str], Optional[str], int]:
@@ -85,7 +79,7 @@ def _infer_from_cwd(num: int) -> Optional[tuple[str, Path]]:
     Walks up from `Path.cwd()` looking for an ancestor directly under
     $APP_EMPIRE_WORKTREES_HOME whose name matches `<Repo>-issue-<N>`.
     """
-    home = Path(os.environ["APP_EMPIRE_WORKTREES_HOME"]).resolve()
+    home = _workspaces_home().resolve()
     cwd = Path.cwd().resolve()
     current = cwd
     while current != current.parent:
@@ -105,7 +99,7 @@ def _resolve_issue(
 ) -> tuple[str, str, int, Path]:
     """Return (owner, repo, num, workspace_path) or die."""
     owner, repo, num = _parse_issue_ref(issue_arg)
-    home = Path(os.environ["APP_EMPIRE_WORKTREES_HOME"])
+    home = _workspaces_home()
 
     if owner is None or repo is None:
         inferred = _infer_from_cwd(num)
