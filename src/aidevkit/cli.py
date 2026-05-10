@@ -13,6 +13,7 @@ from . import config as _config
 from . import doctor as _doctor
 from . import preflight as _preflight
 from . import purge as _purge
+from . import review_issue as _review_issue
 from . import setup as _setup
 from . import status as _status
 from . import sync as _sync
@@ -234,3 +235,93 @@ def check_update(
 def version() -> None:
     info(f"aidevkit {__version__}")
     raise typer.Exit(code=0)
+
+
+# review-issue: pre-SpecKit issue quality gate (DevKit#17). Two subcommands
+# (`inspect` and `post`) compose into the `/devkit.review-issue` slash command.
+review_issue_app = typer.Typer(
+    name="review-issue",
+    help="Review a GitHub issue against the App Empire product-request standard.",
+    no_args_is_help=True,
+)
+app.add_typer(review_issue_app, name="review-issue")
+
+
+@review_issue_app.command("inspect", help="Fetch issue + prior runs, emit JSON for the LLM.")
+def review_issue_inspect(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="OWNER/REPO#N",
+        help="GitHub issue reference, e.g. 'App-Empire-LLC/DevKit#17'.",
+    ),
+    reviewer_id: str = typer.Option(
+        None,
+        "--reviewer-id",
+        help="Override reviewer-id (default: 'claude' or value from .devkit/config.yaml).",
+    ),
+) -> None:
+    issue_arg = _expand_bare_ref(issue_arg)
+    code = _review_issue.cmd_review_issue_inspect(
+        ref=issue_arg, reviewer_id=reviewer_id,
+    )
+    raise typer.Exit(code=code)
+
+
+@review_issue_app.command(
+    "post",
+    help="Validate findings JSON on stdin and post the consolidated review comment.",
+)
+def review_issue_post(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="OWNER/REPO#N",
+        help="GitHub issue reference, e.g. 'App-Empire-LLC/DevKit#17'.",
+    ),
+    findings_stdin: bool = typer.Option(
+        False,
+        "--findings-stdin",
+        help="Required marker indicating findings JSON is being read from stdin.",
+    ),
+    reviewer_id: str = typer.Option(
+        None,
+        "--reviewer-id",
+        help=(
+            "Override reviewer-id (must match the value used in the "
+            "corresponding `inspect` call)."
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Render the consolidated comment to stdout; do NOT post.",
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit the full JSON envelope to stdout.",
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", help="Include nit-level findings as full rows in the comment table.",
+    ),
+    min_severity: str = typer.Option(
+        "warning",
+        "--min-severity",
+        help=(
+            "One of blocker/warning/nit. If all findings are below the threshold, "
+            "the comment is NOT posted."
+        ),
+    ),
+) -> None:
+    issue_arg = _expand_bare_ref(issue_arg)
+    if not findings_stdin:
+        from .util import die as _die
+        _die(
+            "`--findings-stdin` is required (this reserves space for a future "
+            "`--findings <path>` form). Pipe a findings JSON document into stdin.",
+            code=2,
+        )
+    code = _review_issue.cmd_review_issue_post(
+        ref=issue_arg,
+        reviewer_id=reviewer_id,
+        dry_run=dry_run,
+        json_output=json_output,
+        verbose=verbose,
+        min_severity=min_severity,
+    )
+    raise typer.Exit(code=code)

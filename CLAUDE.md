@@ -16,7 +16,7 @@ Companion tooling for GitHub Spec-Kit and the App Empire per-issue worktree work
 
 - `src/aidevkit/` — the Python package
   - `cli.py` — Typer app + subcommand wiring
-  - `bootstrap.py` / `doctor.py` / `setup.py` / `sync.py` — one module per subcommand
+  - `bootstrap.py` / `doctor.py` / `setup.py` / `sync.py` / `review_issue.py` — one module per subcommand
   - `util.py` — exit-code constants, Rich consoles, `log`/`info`/`die`, subprocess helpers (`run`/`git`/`gh`)
   - `commands/` — bundled Claude Code slash-command markdown, symlinked into `~/.claude/commands/` by `devkit setup`
   - `schemas/` — JSON Schemas shipped as package resources (load via `importlib.resources.files("aidevkit.schemas")`)

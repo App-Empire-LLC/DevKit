@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DevKit Review-Issue — Findings Input",
+  "description": "Schema for the findings JSON document the slash-command markdown (LLM-side) writes and the `devkit review-issue post` Python harness validates before composing/posting the consolidated comment. Loaded by the harness via `importlib.resources.files('aidevkit.schemas')`; no `$id` is set because the schema is private to this package and not published at any URL.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "findings"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Findings input schema version. Bumped on breaking changes."
+    },
+    "policy_overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional per-run policy override the slash command can supply (e.g., when the operator passes flags that map to gate-policy adjustments).",
+      "properties": {
+        "project_board_required": {"type": "boolean"}
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"},
+      "description": "Ordered list of findings emitted by the analyzer. Order MUST be: anti-patterns first, then completeness, then derived-negative pairs, then ambiguity, then nits (per research.md R11)."
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "warning", "nit"]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "requirement-leakage",
+        "test-plan-as-ac",
+        "chat-history-dependency",
+        "derived-negative-pair",
+        "negative-wording",
+        "completeness",
+        "ambiguity",
+        "label-hygiene",
+        "board-hygiene",
+        "scope-boundary",
+        "nit"
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "severity", "location", "summary", "recommendation"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F[0-9]{2,3}$",
+          "description": "Stable per-run finding ID (F01, F02, ...). Assigned in emission order. Resets on each run (per research.md R11)."
+        },
+        "category": {"$ref": "#/$defs/category"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where in the issue the finding applies (e.g., 'Acceptance Criteria, item 3', 'Body §Summary')."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Single-line description, fits in the table cell."
+        },
+        "recommendation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Suggested action or rewrite. Markdown allowed."
+        },
+        "evidence": {
+          "type": "string",
+          "description": "Optional quoted snippet from the issue body that triggered the finding. Markdown allowed."
+        },
+        "pair": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Required when category == derived-negative-pair. Names the positive and negative ACs in the same issue and the operator dispositions per FR-010.",
+          "required": ["positive_ref", "negative_ref", "dispositions"],
+          "properties": {
+            "positive_ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Reference to the positive AC inside the issue (e.g., 'AC item 1: \"...\"')."
+            },
+            "negative_ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Reference to the negative AC inside the issue (e.g., 'AC item 2: \"...\"')."
+            },
+            "entailment_explanation": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional one-line explanation of why the positive entails the negative."
+            },
+            "dispositions": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["choice", "description"],
+                "properties": {
+                  "choice": {
+                    "type": "string",
+                    "enum": ["drop", "non-goal", "risk-control"]
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "description": "Exactly three dispositions corresponding to FR-010: (a) drop the negative AC, (b) keep as non-goal documentation only, (c) escalate to risk-control invariant."
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"category": {"const": "derived-negative-pair"}}},
+          "then": {"required": ["pair"]}
+        }
+      ]
+    }
+  }
+}
