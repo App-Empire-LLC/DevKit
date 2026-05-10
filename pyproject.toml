@@ -13,6 +13,11 @@ dependencies = [
     "typer>=0.12",
     "rich>=13",
     "pyyaml>=6.0",
+    # jsonschema validates LLM-produced findings input at runtime in the
+    # `review-issue post` command (DevKit#17 — see specs/001-review-issue/
+    # plan.md). The plan originally listed it as test-only; runtime validation
+    # of the slash-command handoff promoted it to a primary dep.
+    "jsonschema>=4",
 ]
 
 [project.optional-dependencies]

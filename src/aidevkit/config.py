@@ -177,10 +177,102 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 _ALLOWED_GLOBAL_FIELDS = {
     "version", "org", "workspaces_home", "always_include_repos", "projects_home",
+    "review_issue",
 }
 _ALLOWED_PROJECTS_HOME_FIELDS = {
     "version", "org", "workspaces_home", "always_include_repos",
+    "review_issue",
 }
+
+_REVIEWER_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
+
+
+@dataclass(frozen=True)
+class ReviewIssueConfig:
+    """Optional `review_issue` block from `.devkit/config.yaml`.
+
+    Two fields per spec/research R5 (creep K3/K4 cut the rest):
+    - reviewer_id: identity for run-marker grouping (default "claude")
+    - project_board_required: whether absence of a project board is blocker (default True)
+    """
+
+    reviewer_id: str = "claude"
+    project_board_required: bool = True
+
+
+def _validate_review_issue_block(raw: Any, source: Path) -> ReviewIssueConfig:
+    """Parse and validate the review_issue config block. Returns defaults if raw is None."""
+    if raw is None:
+        return ReviewIssueConfig()
+    if not isinstance(raw, dict):
+        _config_error(
+            "review_issue",
+            source,
+            f"value must be a mapping (got {type(raw).__name__})",
+            "use YAML mapping syntax, e.g.\n    review_issue:\n      reviewer_id: claude",
+        )
+    allowed = {"reviewer_id", "gate"}
+    for key in raw:
+        if key not in allowed:
+            _config_error(
+                f"review_issue.{key}",
+                source,
+                f"unknown field: {key!r}",
+                f"remove the field. Allowed: {sorted(allowed)} "
+                "(see research.md R5 / creep.md K3/K4)",
+            )
+    reviewer_id = raw.get("reviewer_id", "claude")
+    if not isinstance(reviewer_id, str) or not _REVIEWER_ID_RE.match(reviewer_id):
+        _config_error(
+            "review_issue.reviewer_id",
+            source,
+            f"value must match {_REVIEWER_ID_RE.pattern} (got {reviewer_id!r})",
+            "use lowercase letters, digits, and hyphens only — e.g. 'claude' or 'gpt'",
+        )
+    gate = raw.get("gate", {})
+    if not isinstance(gate, dict):
+        _config_error(
+            "review_issue.gate",
+            source,
+            f"value must be a mapping (got {type(gate).__name__})",
+            "use YAML mapping syntax, e.g.\n    review_issue:\n"
+            "      gate:\n        project_board_required: true",
+        )
+    gate_allowed = {"project_board_required"}
+    for key in gate:
+        if key not in gate_allowed:
+            _config_error(
+                f"review_issue.gate.{key}",
+                source,
+                f"unknown field: {key!r}",
+                f"remove the field. Allowed: {sorted(gate_allowed)}",
+            )
+    project_board_required = gate.get("project_board_required", True)
+    if not isinstance(project_board_required, bool):
+        _config_error(
+            "review_issue.gate.project_board_required",
+            source,
+            f"value must be a boolean (got {type(project_board_required).__name__})",
+            "use 'true' or 'false'",
+        )
+    return ReviewIssueConfig(
+        reviewer_id=reviewer_id,
+        project_board_required=project_board_required,
+    )
+
+
+def load_review_issue_config(projects_home: Path) -> ReviewIssueConfig:
+    """Load the optional `review_issue` block from the projects-home config.
+
+    Reads only the projects-home tier (matches `load_merged_config`'s primary
+    source). Returns defaults if the block is absent. Raises `typer.Exit(70)`
+    via `_config_error` on schema failure.
+    """
+    projects_home_config = projects_home / DEVKIT_DIRNAME / CONFIG_FILENAME
+    if not projects_home_config.is_file():
+        return ReviewIssueConfig()
+    data = _load_yaml(projects_home_config)
+    return _validate_review_issue_block(data.get("review_issue"), projects_home_config)
 
 
 def _check_unknown_fields(data: dict[str, Any], allowed: set[str], source: Path) -> None:

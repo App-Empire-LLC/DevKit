@@ -7,6 +7,7 @@ name = "aidevkit"
 version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
@@ -22,6 +23,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = ">=4" },
     { name = "jsonschema", marker = "extra == 'test'", specifier = ">=4" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5" },

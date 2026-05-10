@@ -35,6 +35,8 @@ E_CHECK_UPDATE_INDEX_UNAVAILABLE = 27
 E_CONFIG_INVALID = 70
 E_CATALOG_INVALID = 71
 E_TEMPLATE_COLLISION = 72
+E_FINDINGS_INVALID = 74
+E_GH_COMMENT_FAILED = 75
 
 out = Console(markup=False, highlight=False, soft_wrap=True)
 err = Console(stderr=True, markup=False, highlight=False, soft_wrap=True)

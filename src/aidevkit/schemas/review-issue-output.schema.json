@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DevKit Review-Issue — Output Envelope",
+  "description": "Schema for the `--json` output of `devkit review-issue post` (the canonical machine-readable payload for downstream automation per FR-017). Also describes the subset emitted by `devkit review-issue inspect`. Loaded by the harness via `importlib.resources.files('aidevkit.schemas')`; no `$id` is set because the schema is private to this package and not published at any URL. The `pair` definition is inlined below so this schema does not require cross-file `$ref` resolution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "issue", "reviewer", "run"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Output schema version. Bumped on breaking changes."
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "url"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+$"
+        },
+        "url": {"type": "string", "format": "uri"}
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,30}$",
+          "description": "Reviewer agent identifier (e.g., 'claude'). See research.md R4."
+        },
+        "version": {
+          "type": "string",
+          "description": "aidevkit package version, set by the harness from aidevkit.__version__."
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at"],
+      "description": "Either `n` (post output, the run that just happened) or `n_next` (inspect output, the run the harness will use on the next post call) is present, never both.",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Run number for this reviewer-id on this issue. Present in `post` output only."
+        },
+        "n_next": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Present in `inspect` output only — the n the harness will use on the next post call."
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp the run began."
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_board_required"],
+      "properties": {
+        "project_board_required": {"type": "boolean"}
+      }
+    },
+    "prior_runs": {
+      "type": "array",
+      "description": "Emitted by `inspect` only. Lists prior run markers found on this issue grouped by reviewer-id.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewer_id", "n"],
+        "properties": {
+          "reviewer_id": {"type": "string"},
+          "n": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "gate": {
+      "type": "string",
+      "enum": ["READY", "READY_WITH_WARNINGS", "BLOCKED"],
+      "description": "The gate result. Computed per data-model.md §4. Absent in `inspect` output (which is pre-analysis)."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Per-finding records. Same shape as the input findings, with the harness adding nothing the LLM didn't supply except for being included verbatim. Absent in `inspect` output.",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Counts derived from the findings. Absent in `inspect` output.",
+      "required": [
+        "total", "blockers", "warnings", "nits",
+        "antipatterns", "derived_negative_pairs"
+      ],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "blockers": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0},
+        "nits": {"type": "integer", "minimum": 0},
+        "antipatterns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of findings whose category is one of: requirement-leakage, test-plan-as-ac, chat-history-dependency."
+        },
+        "derived_negative_pairs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of findings whose category is derived-negative-pair."
+        }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Whether and where the consolidated comment was posted. Absent in `inspect` output. In `post --dry-run` runs, posted is false and url is absent. In `post --min-severity` suppression runs, posted is false and a `suppression_reason` field names why.",
+      "required": ["posted"],
+      "properties": {
+        "posted": {"type": "boolean"},
+        "url": {"type": "string", "format": "uri"},
+        "suppression_reason": {
+          "type": "string",
+          "enum": ["dry-run", "below-min-severity"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "severity", "location", "summary", "recommendation"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^F[0-9]{2,3}$"},
+        "category": {
+          "type": "string",
+          "enum": [
+            "requirement-leakage",
+            "test-plan-as-ac",
+            "chat-history-dependency",
+            "derived-negative-pair",
+            "negative-wording",
+            "completeness",
+            "ambiguity",
+            "label-hygiene",
+            "board-hygiene",
+            "scope-boundary",
+            "nit"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["blocker", "warning", "nit"]
+        },
+        "location": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 240},
+        "recommendation": {"type": "string", "minLength": 1},
+        "evidence": {"type": "string"},
+        "pair": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Present only when category == derived-negative-pair. Inlined here (rather than $ref'd from review-issue-findings.schema.json) so this schema needs no cross-file resolution.",
+          "required": ["positive_ref", "negative_ref", "dispositions"],
+          "properties": {
+            "positive_ref": {"type": "string", "minLength": 1},
+            "negative_ref": {"type": "string", "minLength": 1},
+            "entailment_explanation": {"type": "string", "minLength": 1},
+            "dispositions": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["choice", "description"],
+                "properties": {
+                  "choice": {
+                    "type": "string",
+                    "enum": ["drop", "non-goal", "risk-control"]
+                  },
+                  "description": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
