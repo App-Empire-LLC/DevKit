@@ -1,10 +1,10 @@
 ---
-description: Review a GitHub issue against the App Empire product-request standard before SpecKit handoff
+description: Review a GitHub issue against the App Empire issue-authoring standard before SpecKit handoff
 ---
 
 # /devkit.review-issue
 
-Pre-SpecKit quality gate. Reviews a GitHub issue against `appire_docs/docs/engineering/standards/product_requests.md` and posts a single consolidated review comment with a `READY` / `READY_WITH_WARNINGS` / `BLOCKED` gate.
+Pre-SpecKit quality gate. Reviews a GitHub issue against `appire_docs/docs/engineering/standards/issue_authoring.md` and posts a single consolidated review comment with a `READY` / `READY_WITH_WARNINGS` / `BLOCKED` gate.
 
 This command is operator-explicit only. There is no auto-trigger on issue events or comment activity.
 
@@ -42,13 +42,13 @@ Parse the JSON envelope it prints. You'll use `issue.ref`, `issue.url`, the next
 
 ### Step 2 — read the canon
 
-Read `appire_docs/docs/engineering/standards/product_requests.md`. It's the source of truth for everything below; do not rely on training data.
+Read `appire_docs/docs/engineering/standards/issue_authoring.md`. It's the source of truth for everything below; do not rely on training data.
 
 ### Step 3 — apply the detectors
 
 Build a findings list classified by category and severity. Each finding is one of:
 
-**Review Checklist (9 questions from `product_requests.md`)** — for each, emit a `completeness` finding when the answer is "no" or "unclear":
+**Review Checklist (9 questions from `issue_authoring.md`)** — for each, emit a `completeness` finding when the answer is "no" or "unclear":
 
 1. Does this issue describe what needs to be true?
 2. Did the author accidentally describe how to build it?
@@ -60,7 +60,7 @@ Build a findings list classified by category and severity. Each finding is one o
 8. Could Claude Code over-constrain the spec because the issue is too specific?
 9. Does the issue stand alone without relying on chat history?
 
-**Definition of Done for Issue Authoring (8 items from `product_requests.md`)** — for each, emit a `completeness` finding when the item isn't satisfied:
+**Definition of Done for Issue Authoring (8 items from `issue_authoring.md`)** — for each, emit a `completeness` finding when the item isn't satisfied:
 
 1. Actor and desired outcome are clear.
 2. Acceptance criteria describe observable outcomes.
@@ -71,7 +71,7 @@ Build a findings list classified by category and severity. Each finding is one o
 7. SpecKit can generate a spec without inheriting accidental implementation requirements.
 8. Claude Code has enough context to proceed without guessing product intent.
 
-**Anti-patterns (3, from `product_requests.md`)** — emit one finding per detected instance:
+**Anti-patterns (3, from `issue_authoring.md`)** — emit one finding per detected instance:
 
 - `requirement-leakage` — implementation choices presented as acceptance criteria (e.g., "Use Ory Kratos for auth").
 - `test-plan-as-ac` — acceptance criteria that name test mechanics rather than expected behavior.
@@ -183,7 +183,7 @@ Use this mode when feeding downstream automation (e.g., a future "promote to Rea
 
 - **2** `E_USAGE` — bad ref or unknown flag.
 - **13** `E_REPO_NOT_FOUND` — gh says the issue or repo doesn't exist or isn't accessible.
-- **70** `E_CONFIG_INVALID` — `.devkit/config.yaml` `review_issue` block fails schema, or the hardcoded product-request standard path can't be found in this workspace (likely cause: `appire_docs` not checked out as a sibling repo).
+- **70** `E_CONFIG_INVALID` — `.devkit/config.yaml` `review_issue` block fails schema, or the issue-authoring standard's resolved path can't be found (likely cause: `appire_docs` not checked out as a sibling repo, or a stale `review_issue.standard_path` / `DEVKIT_REVIEW_ISSUE_STANDARD_PATH` env var). The error message names both the attempted path and which precedence source supplied it.
 - **74** `E_FINDINGS_INVALID` — the findings JSON failed schema validation; the harness posts no comment.
 - **75** `E_GH_COMMENT_FAILED` — `gh issue comment` returned non-zero; the issue thread is unchanged.
 
@@ -191,7 +191,7 @@ Use this mode when feeding downstream automation (e.g., a future "promote to Rea
 
 - One consolidated comment per run. The slash command never posts per-finding comments.
 - Each comment carries an HTML marker `<!-- devkit-review-issue:<reviewer-id>:run-N -->` on its first line. Re-runs add a new comment with an incremented `run-N`; prior comments are not edited or deleted by the harness.
-- The product-request standard's path is locked at `appire_docs/docs/engineering/standards/product_requests.md` per spec FR-006 (configurability deferred — see `specs/001-review-issue/creep.md` K3).
+- The issue-authoring standard's path defaults to `appire_docs/docs/engineering/standards/issue_authoring.md`, configurable via `review_issue.standard_path` in `.devkit/config.yaml`. The env var `DEVKIT_REVIEW_ISSUE_STANDARD_PATH` overrides both (test/operator hook). Precedence is strict: a higher-precedence source, once set, is never overridden by a lower-precedence one even if its path doesn't resolve. See spec `001-review-issue-standard-path`.
 - The default gate policy (per spec FR-012):
   - `BLOCKED` — no summary, no AC section, no observable outcome, all ACs are implementation detail (Requirement Leakage), or issue not on a project board (when the repo has one).
   - `READY_WITH_WARNINGS` — ambiguity placeholders ("TBD", "we'll figure out"), AC duplication or entailment, broad prohibitions, missing labels, missing parent-epic reference where applicable, negatives needing operator triage.

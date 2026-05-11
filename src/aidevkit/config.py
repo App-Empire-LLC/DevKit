@@ -191,17 +191,33 @@ _REVIEWER_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 class ReviewIssueConfig:
     """Optional `review_issue` block from `.devkit/config.yaml`.
 
-    Two fields per spec/research R5 (creep K3/K4 cut the rest):
-    - reviewer_id: identity for run-marker grouping (default "claude")
-    - project_board_required: whether absence of a project board is blocker (default True)
+    Fields (spec 001-review-issue-standard-path; supersedes earlier R5 / creep K3-K4):
+    - reviewer_id: identity for run-marker grouping (default "claude").
+    - project_board_required: absence-of-board is blocker when True (default True).
+    - standard_path: operator override for the issue-authoring standard's location
+      (FR-002). Relative paths are resolved against ``projects_home`` at load
+      time; absolute paths are used as-is. ``None`` means fall through to env
+      var (highest precedence) → built-in default search.
+    - source_config_path: absolute path to the ``.devkit/config.yaml`` that
+      supplied this block. Used by the standard-path resolver to label the
+      source in error messages (FR-007). ``None`` when no config file existed.
     """
 
     reviewer_id: str = "claude"
     project_board_required: bool = True
+    standard_path: Path | None = None
+    source_config_path: Path | None = None
 
 
-def _validate_review_issue_block(raw: Any, source: Path) -> ReviewIssueConfig:
-    """Parse and validate the review_issue config block. Returns defaults if raw is None."""
+def _validate_review_issue_block(
+    raw: Any, source: Path, projects_home: Path
+) -> ReviewIssueConfig:
+    """Parse and validate the review_issue config block.
+
+    Returns defaults (with ``source_config_path=None``) if ``raw`` is None.
+    Relative ``standard_path`` values are resolved against ``projects_home``;
+    absolute paths are used as-is.
+    """
     if raw is None:
         return ReviewIssueConfig()
     if not isinstance(raw, dict):
@@ -211,15 +227,14 @@ def _validate_review_issue_block(raw: Any, source: Path) -> ReviewIssueConfig:
             f"value must be a mapping (got {type(raw).__name__})",
             "use YAML mapping syntax, e.g.\n    review_issue:\n      reviewer_id: claude",
         )
-    allowed = {"reviewer_id", "gate"}
+    allowed = {"reviewer_id", "gate", "standard_path"}
     for key in raw:
         if key not in allowed:
             _config_error(
                 f"review_issue.{key}",
                 source,
                 f"unknown field: {key!r}",
-                f"remove the field. Allowed: {sorted(allowed)} "
-                "(see research.md R5 / creep.md K3/K4)",
+                f"remove the field. Allowed: {sorted(allowed)}",
             )
     reviewer_id = raw.get("reviewer_id", "claude")
     if not isinstance(reviewer_id, str) or not _REVIEWER_ID_RE.match(reviewer_id):
@@ -255,9 +270,26 @@ def _validate_review_issue_block(raw: Any, source: Path) -> ReviewIssueConfig:
             f"value must be a boolean (got {type(project_board_required).__name__})",
             "use 'true' or 'false'",
         )
+    standard_path: Path | None = None
+    raw_standard_path = raw.get("standard_path")
+    if raw_standard_path is not None:
+        if not isinstance(raw_standard_path, str) or not raw_standard_path.strip():
+            _config_error(
+                "review_issue.standard_path",
+                source,
+                f"value must be a non-empty string (got {type(raw_standard_path).__name__})",
+                "use a filesystem path, e.g.\n    review_issue:\n"
+                "      standard_path: appire_docs/docs/engineering/standards/issue_authoring.md",
+            )
+        sp = Path(raw_standard_path)
+        if not sp.is_absolute():
+            sp = (projects_home / sp).resolve()
+        standard_path = sp
     return ReviewIssueConfig(
         reviewer_id=reviewer_id,
         project_board_required=project_board_required,
+        standard_path=standard_path,
+        source_config_path=source,
     )
 
 
@@ -266,13 +298,16 @@ def load_review_issue_config(projects_home: Path) -> ReviewIssueConfig:
 
     Reads only the projects-home tier (matches `load_merged_config`'s primary
     source). Returns defaults if the block is absent. Raises `typer.Exit(70)`
-    via `_config_error` on schema failure.
+    via `_config_error` on schema failure. Threads ``projects_home`` into the
+    validator so relative ``standard_path`` values can be resolved against it.
     """
     projects_home_config = projects_home / DEVKIT_DIRNAME / CONFIG_FILENAME
     if not projects_home_config.is_file():
         return ReviewIssueConfig()
     data = _load_yaml(projects_home_config)
-    return _validate_review_issue_block(data.get("review_issue"), projects_home_config)
+    return _validate_review_issue_block(
+        data.get("review_issue"), projects_home_config, projects_home
+    )
 
 
 def _check_unknown_fields(data: dict[str, Any], allowed: set[str], source: Path) -> None:

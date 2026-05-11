@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aidevkit"
-version = "0.4.0"
+version = "0.5.0"
 description = "Companion tooling for GitHub Spec-Kit — per-issue git worktrees, Claude Code slash commands, and workflow helpers."
 readme = "README.md"
 license = { file = "LICENSE" }

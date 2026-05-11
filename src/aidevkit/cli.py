@@ -241,7 +241,7 @@ def version() -> None:
 # (`inspect` and `post`) compose into the `/devkit.review-issue` slash command.
 review_issue_app = typer.Typer(
     name="review-issue",
-    help="Review a GitHub issue against the App Empire product-request standard.",
+    help="Review a GitHub issue against the App Empire issue-authoring standard.",
     no_args_is_help=True,
 )
 app.add_typer(review_issue_app, name="review-issue")
