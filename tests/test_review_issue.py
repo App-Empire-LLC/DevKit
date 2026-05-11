@@ -10,7 +10,7 @@ Helpers in this module:
   schema-validation tests.
 - ``cortex_expertise_issue_fixture``: the DevKit#17 motivating example
   (positive AC: env-var config; negative AC: does-not-require-cortex-config).
-- ``standard_path_env``: monkeypatch the product-request standard path so the
+- ``standard_path_env``: monkeypatch the issue-authoring standard path so the
   runtime existence check finds it during tests.
 """
 from __future__ import annotations
@@ -136,13 +136,13 @@ def cortex_pair_finding() -> dict[str, Any]:
 
 @pytest.fixture
 def standard_path_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Materialise a stub product-request standard and point the resolver at it.
+    """Materialise a stub issue-authoring standard and point the resolver at it.
 
     The resolver checks ``$DEVKIT_REVIEW_ISSUE_STANDARD_PATH`` first; setting
     that lets tests run from any cwd without dragging in the real appire_docs.
     """
-    standard = tmp_path / "product_requests.md"
-    standard.write_text("# Product Requests\nStub for tests.\n")
+    standard = tmp_path / "issue_authoring.md"
+    standard.write_text("# Issue Authoring\nStub for tests.\n")
     monkeypatch.setenv("DEVKIT_REVIEW_ISSUE_STANDARD_PATH", str(standard))
     return standard
 

@@ -44,7 +44,7 @@ EXPECTED_HELP = """\
 │ update        Upgrade DevKit to the latest release, then run doctor.         │
 │ check-update  Check whether a newer aidevkit release is available.           │
 │ version       Print the installed aidevkit version.                          │
-│ review-issue  Review a GitHub issue against the App Empire product-request   │
+│ review-issue  Review a GitHub issue against the App Empire issue-authoring   │
 │               standard.                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 """

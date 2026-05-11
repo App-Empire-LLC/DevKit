@@ -26,6 +26,7 @@ import re
 import sys
 import tempfile
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib.resources import files as _resource_files
 from pathlib import Path
 from typing import Any
@@ -68,6 +69,19 @@ _ANTIPATTERN_CATEGORIES = frozenset(
 )
 
 
+class StandardPathSource(StrEnum):
+    """Identifies which precedence source supplied the resolved standard path.
+
+    Returned by ``_resolve_issue_authoring_standard_path`` and embedded in
+    failure error messages so operators know which surface to fix
+    (spec FR-007, contracts/error-format.md).
+    """
+
+    ENV_VAR = "environment variable DEVKIT_REVIEW_ISSUE_STANDARD_PATH"
+    CONFIG = "config field review_issue.standard_path"
+    DEFAULT = "built-in default (no env var or review_issue.standard_path configured)"
+
+
 @dataclass(frozen=True)
 class ReviewConfig:
     """Resolved per-invocation review configuration.
@@ -103,12 +117,16 @@ _OUTPUT_SCHEMA = _load_schema("review-issue-output.schema.json")
 # --------------------------------------------------------------------------- #
 
 
-def _resolve_review_config(reviewer_id_override: str | None) -> ReviewConfig:
+def _resolve_review_config(
+    reviewer_id_override: str | None,
+) -> tuple[ReviewConfig, ReviewIssueConfig]:
     """Resolve the review config from .devkit/config.yaml + CLI override.
 
-    Priority for reviewer_id (research R4): CLI flag > config > default "claude".
-    Falls back to defaults when projects-home isn't resolvable (e.g., running
-    outside any DevKit workspace).
+    Priority for reviewer_id: CLI flag > config > default "claude". Returns
+    BOTH the per-call ``ReviewConfig`` and the underlying persisted
+    ``ReviewIssueConfig``; the latter feeds the standard-path resolver
+    (spec 001-review-issue-standard-path FR-002). Falls back to defaults
+    when projects-home isn't resolvable.
     """
     persisted = ReviewIssueConfig()
     try:
@@ -116,43 +134,75 @@ def _resolve_review_config(reviewer_id_override: str | None) -> ReviewConfig:
         persisted = load_review_issue_config(projects_home)
     except typer.Exit:
         # No projects-home config — defaults apply. The standard-path resolver
-        # (T010) will surface a clearer error if the operator is genuinely in
-        # the wrong context.
+        # will surface a clearer error if the operator is genuinely in the
+        # wrong context.
         pass
-    return ReviewConfig(
+    config = ReviewConfig(
         reviewer_id=reviewer_id_override or persisted.reviewer_id,
         project_board_required=persisted.project_board_required,
     )
+    return config, persisted
 
 
-def _resolve_product_request_standard_path() -> Path:
-    """Locate the product-request standard.
+_STANDARD_REL_PATH = "appire_docs/docs/engineering/standards/issue_authoring.md"
 
-    Per research R10 / creep K3, the path is hardcoded — no config field.
-    Search order:
-      1. ``$DEVKIT_REVIEW_ISSUE_STANDARD_PATH`` env var (test hook only).
-      2. ``<cwd>/appire_docs/...`` — sibling repo in the workspace.
-      3. ``<cwd>/../appire_docs/...`` — sibling at the workspace root.
-    Fails with E_CONFIG_INVALID if none resolve.
+
+def _resolve_issue_authoring_standard_path(
+    config: ReviewIssueConfig,
+) -> tuple[Path, StandardPathSource]:
+    """Locate the App Empire issue-authoring standard for this invocation.
+
+    Strict precedence (spec FR-003): env var → config override → built-in
+    default. Once a higher-precedence source is set, lower-precedence sources
+    are NOT consulted even if the higher-precedence path does not resolve.
+    On failure, raises ``typer.Exit(E_CONFIG_INVALID)`` with an error message
+    that names BOTH the attempted path AND the source that supplied it
+    (FR-007; see contracts/error-format.md for the canonical format).
     """
-    rel = "appire_docs/docs/engineering/standards/product_requests.md"
     env_override = os.environ.get("DEVKIT_REVIEW_ISSUE_STANDARD_PATH")
     if env_override:
         candidate = Path(env_override)
         if candidate.is_file():
-            return candidate.resolve()
+            return candidate.resolve(), StandardPathSource.ENV_VAR
+        die(
+            "Issue-authoring standard not found.\n"
+            f"  Expected: {candidate}\n"
+            f"  Source:   {StandardPathSource.ENV_VAR.value}\n"
+            "  Fix:      unset DEVKIT_REVIEW_ISSUE_STANDARD_PATH or point it at "
+            "an existing file.",
+            code=E_CONFIG_INVALID,
+        )
+
+    if config.standard_path is not None:
+        candidate = config.standard_path
+        if candidate.is_file():
+            return candidate.resolve(), StandardPathSource.CONFIG
+        source_label = StandardPathSource.CONFIG.value
+        if config.source_config_path is not None:
+            source_label = f"{source_label} in {config.source_config_path}"
+        die(
+            "Issue-authoring standard not found.\n"
+            f"  Expected: {candidate}\n"
+            f"  Source:   {source_label}\n"
+            "  Fix:      correct the path in .devkit/config.yaml or remove "
+            "review_issue.standard_path to use the default.",
+            code=E_CONFIG_INVALID,
+        )
+
     cwd = Path.cwd()
     for base in (cwd, cwd.parent):
-        candidate = base / rel
+        candidate = base / _STANDARD_REL_PATH
         if candidate.is_file():
-            return candidate.resolve()
+            return candidate.resolve(), StandardPathSource.DEFAULT
     die(
-        f"product-request standard not found.\n"
-        f"  Expected: <workspace>/{rel}\n"
-        f"  Searched: {cwd / rel}\n"
-        f"           {cwd.parent / rel}\n"
-        f"  Likely cause: appire_docs is not checked out as a sibling repo in this workspace.\n"
-        f"  Fix: clone or worktree appire_docs alongside the repo you're reviewing from.",
+        "Issue-authoring standard not found.\n"
+        f"  Searched: {cwd / _STANDARD_REL_PATH}\n"
+        f"            {cwd.parent / _STANDARD_REL_PATH}\n"
+        f"  Source:   {StandardPathSource.DEFAULT.value}\n"
+        "  Likely cause: appire_docs is not checked out as a sibling repo in "
+        "this workspace.\n"
+        "  Fix:      clone or worktree appire_docs alongside this directory, "
+        "or set review_issue.standard_path in .devkit/config.yaml.",
         code=E_CONFIG_INVALID,
     )
     raise AssertionError("die() should have exited")  # pragma: no cover
@@ -462,8 +512,8 @@ def _now_iso() -> str:
 
 def cmd_review_issue_inspect(ref: str, reviewer_id: str | None) -> int:
     """Fetch issue + prior runs, emit JSON envelope to stdout."""
-    config = _resolve_review_config(reviewer_id)
-    _resolve_product_request_standard_path()  # fail-fast on missing standard
+    config, persisted = _resolve_review_config(reviewer_id)
+    _resolve_issue_authoring_standard_path(persisted)  # fail-fast on missing standard
     issue = _fetch_issue(ref)
     prior = _scan_prior_runs(issue.get("comments") or [])
     envelope = _build_inspect_envelope(issue, config, prior)
@@ -510,8 +560,8 @@ def cmd_review_issue_post(
             code=E_FINDINGS_INVALID,
         )
 
-    config = _resolve_review_config(reviewer_id)
-    _resolve_product_request_standard_path()  # fail-fast on missing standard
+    config, persisted = _resolve_review_config(reviewer_id)
+    _resolve_issue_authoring_standard_path(persisted)  # fail-fast on missing standard
     issue = _fetch_issue(ref)
     prior = _scan_prior_runs(issue.get("comments") or [])
     n = _next_n_for(prior, config.reviewer_id)
