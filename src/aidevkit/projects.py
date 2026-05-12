@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .util import E_CATALOG_INVALID, E_REPO_NOT_FOUND, die
+from .util import E_CATALOG_AMBIGUOUS, E_CATALOG_INVALID, E_REPO_NOT_FOUND, die
 
 REQUIRED_COLUMNS = ("name", "git_url", "description")
 OPTIONAL_COLUMNS = ("default_branch",)
@@ -64,19 +64,45 @@ class Catalog:
         raise AssertionError("unreachable")  # pragma: no cover
 
     def resolve_owner_repo(self, owner_repo: str) -> CatalogEntry:
-        for entry in self.entries:
-            if entry.owner_repo == owner_repo:
-                return entry
+        # DevKit#46: GitHub treats owner/repo as case-insensitive, so the
+        # matcher does too. The catalog's stored casing remains authoritative
+        # for branch names, worktree paths, and generated metadata — only the
+        # comparison is case-folded.
+        needle = owner_repo.lower()
+        matches = [
+            e for e in self.entries
+            if e.owner_repo is not None and e.owner_repo.lower() == needle
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if not matches:
+            die(
+                f"repo {owner_repo!r} not found in {self.source_path}.\n"
+                f"  Fix: add a row whose git_url resolves to {owner_repo!r}, "
+                f"or correct the reference.",
+                code=E_REPO_NOT_FOUND,
+            )
+            raise AssertionError("unreachable")  # pragma: no cover
+        # len(matches) >= 2 — catalog-authoring bug; refuse to pick a winner.
+        rows = "\n".join(
+            f"    - {e.name} (git_url: {e.git_url})" for e in matches
+        )
         die(
-            f"repo {owner_repo!r} not found in {self.source_path}.\n"
-            f"  Fix: add a row whose git_url resolves to {owner_repo!r}, "
-            f"or correct the reference.",
-            code=E_REPO_NOT_FOUND,
+            f"catalog has ambiguous entries for {owner_repo!r} in "
+            f"{self.source_path}.\n"
+            f"  Conflicting rows:\n{rows}\n"
+            f"  Fix: remove or rename the duplicate row(s) so only one entry "
+            f"resolves to {owner_repo!r} under case-insensitive comparison.",
+            code=E_CATALOG_AMBIGUOUS,
         )
         raise AssertionError("unreachable")  # pragma: no cover
 
     def has_owner_repo(self, owner_repo: str) -> bool:
-        return any(e.owner_repo == owner_repo for e in self.entries)
+        needle = owner_repo.lower()
+        return any(
+            e.owner_repo is not None and e.owner_repo.lower() == needle
+            for e in self.entries
+        )
 
 
 def _split_row(line: str) -> list[str]:
