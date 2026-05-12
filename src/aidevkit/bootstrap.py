@@ -232,6 +232,15 @@ def cmd_bootstrap(
         always_include=cfg.always_include_repos,
     )
 
+    # DevKit#46 / FR-002: catalog's stored casing is authoritative for every
+    # downstream artifact (workspace path, branch name, generated metadata).
+    # `issue_home` / `repo` here came from the user's typed ref; resolve them
+    # back to the catalog's canonical form before any path or stamp is built.
+    issue_home_entry = repos[0]
+    if issue_home_entry.owner_repo is not None:
+        issue_home = issue_home_entry.owner_repo
+        _, repo = issue_home.split("/", 1)
+
     # Phase 1d: verify source clones and origin/main
     _verify_source_repos(repos, projects_home)
     _validate_origin_main(repos, projects_home)

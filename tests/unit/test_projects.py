@@ -129,6 +129,123 @@ def test_has_owner_repo(tmp_path: Path) -> None:
     assert cat.has_owner_repo("org/missing") is False
 
 
+# ----- DevKit#46: case-insensitive owner/repo matching -----------------------
+
+@pytest.mark.parametrize(
+    "supplied",
+    ["APP-EMPIRE-LLC/foo", "app-empire-llc/foo", "App-Empire-LLC/FOO"],
+)
+def test_has_owner_repo_is_case_insensitive(tmp_path: Path, supplied: str) -> None:
+    """FR-006: has_owner_repo treats owner/repo as case-insensitive."""
+    p = tmp_path / "PROJECTS.md"
+    _write(
+        p,
+        _minimal_table(
+            ["| foo | git@github.com:App-Empire-LLC/foo.git | main | desc |"]
+        ),
+    )
+    cat = parse_projects_md(p)
+    assert cat.has_owner_repo(supplied) is True
+
+
+@pytest.mark.parametrize(
+    "supplied",
+    ["APP-EMPIRE-LLC/foo", "app-empire-llc/foo", "App-Empire-LLC/FOO"],
+)
+def test_resolve_owner_repo_case_insensitive_preserves_stored_casing(
+    tmp_path: Path, supplied: str
+) -> None:
+    """FR-002 + FR-006: case-insensitive lookup returns the catalog entry
+    whose stored owner_repo casing is authoritative for downstream artifacts.
+    """
+    p = tmp_path / "PROJECTS.md"
+    _write(
+        p,
+        _minimal_table(
+            ["| foo | git@github.com:App-Empire-LLC/foo.git | main | desc |"]
+        ),
+    )
+    cat = parse_projects_md(p)
+    entry = cat.resolve_owner_repo(supplied)
+    assert entry.name == "foo"
+    assert entry.owner_repo == "App-Empire-LLC/foo"
+
+
+def test_resolve_owner_repo_unknown_echoes_input_verbatim(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """FR-004: the not-found error path is unchanged and echoes the user's
+    typed casing verbatim in the message.
+    """
+    p = tmp_path / "PROJECTS.md"
+    _write(
+        p,
+        _minimal_table(
+            ["| foo | git@github.com:App-Empire-LLC/foo.git | main | desc |"]
+        ),
+    )
+    cat = parse_projects_md(p)
+    with pytest.raises(typer.Exit) as exc_info:
+        cat.resolve_owner_repo("NotInCatalog/whatever")
+    assert exc_info.value.exit_code == 13  # E_REPO_NOT_FOUND
+    captured = capsys.readouterr()
+    assert "NotInCatalog/whatever" in captured.err
+
+
+def test_resolve_owner_repo_ambiguous_catalog_raises_e_catalog_ambiguous(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """FR-007 + FR-008: a catalog with two rows equal under case-insensitive
+    comparison must raise E_CATALOG_AMBIGUOUS on resolve, and the error
+    payload must list every conflicting row's name and git_url.
+    """
+    p = tmp_path / "PROJECTS.md"
+    _write(
+        p,
+        _minimal_table(
+            [
+                "| foo-lower | git@github.com:app-empire-llc/foo.git | main | lower |",
+                "| foo-upper | git@github.com:App-Empire-LLC/foo.git | main | upper |",
+            ]
+        ),
+    )
+    cat = parse_projects_md(p)
+    # has_owner_repo returns True for any ambiguous lookup (no raise).
+    assert cat.has_owner_repo("app-empire-llc/foo") is True
+    assert cat.has_owner_repo("APP-EMPIRE-LLC/foo") is True
+    # resolve_owner_repo raises E_CATALOG_AMBIGUOUS and lists both rows.
+    with pytest.raises(typer.Exit) as exc_info:
+        cat.resolve_owner_repo("app-empire-llc/foo")
+    assert exc_info.value.exit_code == 73  # E_CATALOG_AMBIGUOUS
+    captured = capsys.readouterr()
+    assert "foo-lower" in captured.err
+    assert "foo-upper" in captured.err
+    assert "app-empire-llc/foo" in captured.err  # input echoed verbatim
+    assert "git@github.com:app-empire-llc/foo.git" in captured.err
+    assert "git@github.com:App-Empire-LLC/foo.git" in captured.err
+
+
+def test_lookup_tolerates_non_github_rows(tmp_path: Path) -> None:
+    """A row whose git_url isn't a recognized GitHub remote returns
+    owner_repo=None; the case-insensitive comparison must skip those rows
+    without raising AttributeError.
+    """
+    p = tmp_path / "PROJECTS.md"
+    _write(
+        p,
+        _minimal_table(
+            [
+                "| internal | https://gitlab.example/team/internal | main | non-github |",
+                "| foo | git@github.com:App-Empire-LLC/foo.git | main | desc |",
+            ]
+        ),
+    )
+    cat = parse_projects_md(p)
+    assert cat.has_owner_repo("APP-EMPIRE-LLC/foo") is True
+    entry = cat.resolve_owner_repo("app-empire-llc/foo")
+    assert entry.name == "foo"
+
+
 # ----- error cases ------------------------------------------------------------
 
 def test_missing_file(tmp_path: Path) -> None:
