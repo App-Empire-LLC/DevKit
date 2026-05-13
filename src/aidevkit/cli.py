@@ -10,6 +10,7 @@ from . import archive as _archive
 from . import bootstrap as _bootstrap
 from . import pr_create as _pr_create
 from . import sub_checkout as _sub_checkout
+from . import sub_merge as _sub_merge
 from . import check_update as _check_update
 from . import config as _config
 from . import doctor as _doctor
@@ -211,6 +212,21 @@ def pr_create(
     ),
 ) -> None:
     code = _pr_create.cmd_pr_create(dry_run=dry_run)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "sub-merge",
+    help="Verify PRs merged for the current sub-issue, advance epic pointer, cascade-up.",
+)
+def sub_merge(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="N or OWNER/REPO#N",
+        help="Sub-issue to mark merged: bare number, #N, or owner/repo#N.",
+    ),
+) -> None:
+    code = _sub_merge.cmd_sub_merge(issue_arg=issue_arg)
     raise typer.Exit(code=code)
 
 
