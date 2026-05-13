@@ -14,6 +14,7 @@ from . import doctor as _doctor
 from . import pr_create as _pr_create
 from . import preflight as _preflight
 from . import purge as _purge
+from . import refresh_issue_meta as _refresh_issue_meta
 from . import review_issue as _review_issue
 from . import setup as _setup
 from . import status as _status
@@ -189,6 +190,14 @@ def archive(
 def preflight() -> None:
     code = _preflight.cmd_preflight()
     raise typer.Exit(code=code)
+
+
+@app.command(
+    "refresh-issue-meta",
+    help="Refresh issue_title / issue_url in WORKSPACE.md from the current GitHub issue state.",
+)
+def refresh_issue_meta() -> None:
+    _refresh_issue_meta.cmd_refresh_issue_meta()
 
 
 @app.command(help="Summarize every active per-issue workspace: issue state, branches, PRs.")

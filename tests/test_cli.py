@@ -24,34 +24,40 @@ EXPECTED_HELP = """\
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ bootstrap     Create a per-issue workspace directory with per-repo git       │
-│               worktrees.                                                     │
-│ doctor        Check dependencies, required env vars, and gh authentication.  │
-│ setup         Link DevKit slash commands into ~/.claude/commands/ (runs      │
-│               doctor first).                                                 │
-│ sync          Fetch and rebase every worktree in the current workspace onto  │
-│               its trunk.                                                     │
-│ archive       Archive a completed per-issue workspace: post spec as issue    │
-│               comment, move workspace to _archived/, prune registrations.    │
-│ preflight     Check whether the current issue branch is behind origin/main   │
-│               (detect-only; no mutation).                                    │
-│ status        Summarize every active per-issue workspace: issue state,       │
-│               branches, PRs.                                                 │
-│ pr-create     Open PRs for the current sub-issue in an epic workspace with   │
-│               correct base branches.                                         │
-│ sub-merge     Verify PRs merged for the current sub-issue, advance epic      │
-│               pointer, cascade-up.                                           │
-│ sub-checkout  Switch all worktrees in an epic workspace to a sub-issue's     │
-│               branch.                                                        │
-│ add-repo      Add a sibling repo's worktree to the current per-issue         │
-│               workspace.                                                     │
-│ purge         Remove archived workspaces older than the retention threshold. │
-│ uninstall     Remove DevKit: uninstall aidevkit and unlink slash commands.   │
-│ update        Upgrade DevKit to the latest release, then run doctor.         │
-│ check-update  Check whether a newer aidevkit release is available.           │
-│ version       Print the installed aidevkit version.                          │
-│ review-issue  Review a GitHub issue against the App Empire issue-authoring   │
-│               standard.                                                      │
+│ bootstrap           Create a per-issue workspace directory with per-repo git │
+│                     worktrees.                                               │
+│ doctor              Check dependencies, required env vars, and gh            │
+│                     authentication.                                          │
+│ setup               Link DevKit slash commands into ~/.claude/commands/      │
+│                     (runs doctor first).                                     │
+│ sync                Fetch and rebase every worktree in the current workspace │
+│                     onto its trunk.                                          │
+│ archive             Archive a completed per-issue workspace: post spec as    │
+│                     issue comment, move workspace to _archived/, prune       │
+│                     registrations.                                           │
+│ preflight           Check whether the current issue branch is behind         │
+│                     origin/main (detect-only; no mutation).                  │
+│ refresh-issue-meta  Refresh issue_title / issue_url in WORKSPACE.md from the │
+│                     current GitHub issue state.                              │
+│ status              Summarize every active per-issue workspace: issue state, │
+│                     branches, PRs.                                           │
+│ pr-create           Open PRs for the current sub-issue in an epic workspace  │
+│                     with correct base branches.                              │
+│ sub-merge           Verify PRs merged for the current sub-issue, advance     │
+│                     epic pointer, cascade-up.                                │
+│ sub-checkout        Switch all worktrees in an epic workspace to a           │
+│                     sub-issue's branch.                                      │
+│ add-repo            Add a sibling repo's worktree to the current per-issue   │
+│                     workspace.                                               │
+│ purge               Remove archived workspaces older than the retention      │
+│                     threshold.                                               │
+│ uninstall           Remove DevKit: uninstall aidevkit and unlink slash       │
+│                     commands.                                                │
+│ update              Upgrade DevKit to the latest release, then run doctor.   │
+│ check-update        Check whether a newer aidevkit release is available.     │
+│ version             Print the installed aidevkit version.                    │
+│ review-issue        Review a GitHub issue against the App Empire             │
+│                     issue-authoring standard.                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 """
 
