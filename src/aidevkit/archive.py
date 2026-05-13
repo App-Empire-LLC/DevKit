@@ -19,6 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from . import epic as _epic
 from ._prs import check_prs_merged as _check_prs_merged
 from .util import (
     E_ARCHIVE_COLLISION,
@@ -361,6 +362,34 @@ def cmd_archive(
 
     if not workspace.exists():
         die(f"workspace does not exist: {workspace}", code=E_WORKSPACE_MISSING)
+
+    # T048–T050: epic-aware all-nodes-merged check (FR-025)
+    epic_graph: _epic.EpicGraph | None = None
+    epic_md_path = workspace / "EPIC.md"
+    if epic_md_path.exists():
+        try:
+            epic_graph = _epic.read_epic_md(workspace)
+        except _epic.EpicGraphInvalid as exc:
+            log(f"WARN: EPIC.md parse error ({exc}); proceeding as non-epic archive")
+            epic_graph = None
+
+    if epic_graph is not None:
+        unmerged = [
+            ref for ref, node in epic_graph.nodes.items()
+            if node.status != "merged"
+        ]
+        if unmerged:
+            if not force:
+                log(f"ERROR: {len(unmerged)} epic node(s) not yet merged:")
+                for ref in sorted(unmerged):
+                    log(f"  - {ref}")
+                log("Re-run with --force to override (at your own risk).")
+                return E_PRS_NOT_MERGED
+            log(f"WARN: proceeding with --force despite {len(unmerged)} unmerged epic node(s):")
+            for ref in sorted(unmerged):
+                log(f"  - {ref}")
+        else:
+            info("Epic nodes: all merged ✓")
 
     repos = _discover_upstream_repos(workspace)
     if repos:

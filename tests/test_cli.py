@@ -37,6 +37,12 @@ EXPECTED_HELP = """\
 │               (detect-only; no mutation).                                    │
 │ status        Summarize every active per-issue workspace: issue state,       │
 │               branches, PRs.                                                 │
+│ pr-create     Open PRs for the current sub-issue in an epic workspace with   │
+│               correct base branches.                                         │
+│ sub-merge     Verify PRs merged for the current sub-issue, advance epic      │
+│               pointer, cascade-up.                                           │
+│ sub-checkout  Switch all worktrees in an epic workspace to a sub-issue's     │
+│               branch.                                                        │
 │ add-repo      Add a sibling repo's worktree to the current per-issue         │
 │               workspace.                                                     │
 │ purge         Remove archived workspaces older than the retention threshold. │

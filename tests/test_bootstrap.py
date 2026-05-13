@@ -8,8 +8,10 @@ import pytest
 from typer.testing import CliRunner
 
 from aidevkit.cli import app
+from aidevkit.epic import EpicGraph, EpicNode
 from aidevkit.util import (
     E_DEP_MISSING,
+    E_EPIC_BRANCH_EXISTS,
     E_ORIGIN_MAIN_UNAVAILABLE,
     E_REPO_NOT_FOUND,
     E_REPOS_MISSING,
@@ -530,7 +532,8 @@ def test_bootstrap_fetch_error_message_identifies_repo(
     # Case 1: fetch failure — message mentions the failing repo.
     capture.set_default(RunResult(code=0, stdout="", stderr=""))
     capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
-    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit fetch
+    capture.queue(RunResult(code=0, stdout="[]", stderr=""))  # gh api sub_issues (no epic)
+    capture.queue(RunResult(code=0, stdout="", stderr=""))    # DevKit fetch
     capture.queue(RunResult(code=0, stdout="abc123\n", stderr=""))  # DevKit verify
     capture.queue(
         RunResult(code=128, stdout="", stderr="fatal: could not read Username for 'https://github.com'")
@@ -555,8 +558,9 @@ def test_bootstrap_missing_origin_message_distinguishes_from_fetch_fail(
     payload = bootstrap_env["issue_payload"]
     capture.set_default(RunResult(code=0, stdout="", stderr=""))
     capture.queue(RunResult(code=0, stdout=json.dumps(payload), stderr=""))
-    capture.queue(RunResult(code=0, stdout="", stderr=""))  # DevKit fetch OK
-    capture.queue(RunResult(code=1, stdout="", stderr=""))  # DevKit verify FAILS
+    capture.queue(RunResult(code=0, stdout="[]", stderr=""))  # gh api sub_issues (no epic)
+    capture.queue(RunResult(code=0, stdout="", stderr=""))    # DevKit fetch OK
+    capture.queue(RunResult(code=1, stdout="", stderr=""))    # DevKit verify FAILS
 
     result = runner.invoke(app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"])
     assert result.exit_code == E_ORIGIN_MAIN_UNAVAILABLE, result.output
@@ -569,3 +573,196 @@ def test_bootstrap_missing_origin_message_distinguishes_from_fetch_fail(
     assert "fetch origin failed" not in result.output, (
         "missing-origin must NOT be reported as a fetch failure"
     )
+
+
+# ── T022 / T024: Epic detection flags ─────────────────────────────────────────
+
+def _make_minimal_epic_graph(top_ref: str, child_ref: str) -> EpicGraph:
+    """Build a minimal 2-node EpicGraph for use in bootstrap unit tests."""
+    nodes = {
+        child_ref: EpicNode(
+            ref=child_ref,
+            type="issue",
+            own_repos=["App-Empire-LLC/DevKit"],
+            effective_repos=["App-Empire-LLC/DevKit"],
+            branch_name="issue-DevKit-7",
+            parent=top_ref,
+            children=[],
+            status="not_started",
+        ),
+        top_ref: EpicNode(
+            ref=top_ref,
+            type="epic",
+            own_repos=["App-Empire-LLC/DevKit"],
+            effective_repos=["App-Empire-LLC/DevKit"],
+            branch_name="issue-DevKit-22",
+            parent=None,
+            children=[child_ref],
+            status="in_progress",
+        ),
+    }
+    return EpicGraph(
+        top_epic=top_ref,
+        current_issue=child_ref,
+        execution_order=[child_ref],
+        nodes=nodes,
+    )
+
+
+def test_no_epic_flag_skips_walk_graph(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T022 / T024: --no-epic bypasses epic detection entirely."""
+    walk_calls: list[tuple] = []
+
+    def _mock_walk(*args, **kwargs):
+        walk_calls.append(args)
+        return None
+
+    monkeypatch.setattr("aidevkit.bootstrap._epic.walk_graph", _mock_walk)
+    runner.invoke(
+        app, ["bootstrap", "--dry-run", "--no-epic", "App-Empire-LLC/DevKit#22"]
+    )
+    assert walk_calls == [], "--no-epic must not call walk_graph"
+
+
+def test_no_recursive_flag_passed_to_walk_graph(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T024: --no-recursive is forwarded to walk_graph as no_recursive=True."""
+    received_kwargs: dict = {}
+
+    def _mock_walk(owner, repo, num, no_recursive, issue_body=""):
+        received_kwargs["no_recursive"] = no_recursive
+        return None
+
+    monkeypatch.setattr("aidevkit.bootstrap._epic.walk_graph", _mock_walk)
+    runner.invoke(
+        app,
+        ["bootstrap", "--dry-run", "--no-recursive", "App-Empire-LLC/DevKit#22"],
+    )
+    assert received_kwargs.get("no_recursive") is True
+
+
+def test_walk_graph_none_proceeds_as_non_epic(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T022 / SC-007: walk_graph returning None → non-epic path, no EPIC.md."""
+    monkeypatch.setattr(
+        "aidevkit.bootstrap._epic.walk_graph", lambda *a, **kw: None
+    )
+    result = runner.invoke(
+        app, ["bootstrap", "--dry-run", "App-Empire-LLC/DevKit#22"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "[dry-run]" in result.output
+    # Non-epic dry-run message must NOT mention epic
+    assert "epic workspace" not in result.output
+
+
+def test_walk_graph_epic_triggers_epic_dry_run_message(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T022: walk_graph returning EpicGraph triggers epic bootstrap path."""
+    top_ref = "App-Empire-LLC/DevKit#22"
+    child_ref = "App-Empire-LLC/DevKit#7"
+    epic = _make_minimal_epic_graph(top_ref, child_ref)
+    monkeypatch.setattr(
+        "aidevkit.bootstrap._epic.walk_graph", lambda *a, **kw: epic
+    )
+    # Branch collision check uses git rev-parse --verify refs/heads/<branch>.
+    # Return code=1 so no collision is detected (branches don't exist yet).
+    payload = bootstrap_env["issue_payload"]
+
+    def _no_collision_run(cmd, *, check=False, cwd=None):
+        if cmd[:3] == ["git", "rev-parse", "--verify"] and "refs/heads/" in " ".join(cmd):
+            return RunResult(code=1, stdout="", stderr="")
+        if cmd[:3] == ["gh", "issue", "view"]:
+            return RunResult(code=0, stdout=json.dumps(payload), stderr="")
+        return RunResult(code=0, stdout="abc123\n", stderr="")
+
+    monkeypatch.setattr("aidevkit.util.run", _no_collision_run)
+    result = runner.invoke(
+        app, ["bootstrap", "--dry-run", "--no-ack", "App-Empire-LLC/DevKit#22"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "epic" in result.output.lower()
+
+
+def test_api_failure_degrades_to_non_epic(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T024 / FR-013: walk_graph raising an exception → stderr warning + non-epic."""
+    warning_msgs: list[str] = []
+
+    def _boom(*a, **kw):
+        raise RuntimeError("network error")
+
+    original_log = __import__("aidevkit.util", fromlist=["log"]).log
+
+    import aidevkit.bootstrap as _bs
+    captured_logs: list[str] = []
+    monkeypatch.setattr(_bs, "log", lambda msg: captured_logs.append(msg))
+    monkeypatch.setattr("aidevkit.bootstrap._epic.walk_graph", _boom)
+
+    result = runner.invoke(
+        app, ["bootstrap", "--dry-run", "App-Empire-LLC/DevKit#22"]
+    )
+    assert result.exit_code == 0, result.output
+    # A WARN message should have been logged
+    warn_msgs = [m for m in captured_logs if "WARN" in m and "epic" in m.lower()]
+    assert warn_msgs, f"Expected WARN log about epic detection failure, got: {captured_logs}"
+
+
+# ── T023: Branch collision detection ──────────────────────────────────────────
+
+def test_epic_branch_collision_fails_before_mkdir(
+    runner: CliRunner,
+    bootstrap_env: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    subprocess_capture,
+) -> None:
+    """T023 / FR-029: pre-existing epic branch → E_EPIC_BRANCH_EXISTS before any mkdir."""
+    top_ref = "App-Empire-LLC/DevKit#22"
+    child_ref = "App-Empire-LLC/DevKit#7"
+    epic = _make_minimal_epic_graph(top_ref, child_ref)
+    monkeypatch.setattr(
+        "aidevkit.bootstrap._epic.walk_graph", lambda *a, **kw: epic
+    )
+
+    payload = bootstrap_env["issue_payload"]
+    workspaces = bootstrap_env["workspaces_dir"]
+
+    def _mock_run(cmd, *, check=False, cwd=None):
+        # gh issue view
+        if cmd[:3] == ["gh", "issue", "view"]:
+            return RunResult(code=0, stdout=json.dumps(payload), stderr="")
+        # git fetch / verify for origin/main validation
+        if cmd[:2] == ["git", "fetch"]:
+            return RunResult(code=0, stdout="", stderr="")
+        if cmd[:3] == ["git", "rev-parse", "--verify"] and "origin/" in " ".join(cmd):
+            return RunResult(code=0, stdout="abc123\n", stderr="")
+        # git rev-parse for branch collision check → success = branch exists!
+        if cmd[:3] == ["git", "rev-parse", "--verify"] and "refs/heads/" in " ".join(cmd):
+            return RunResult(code=0, stdout="deadbeef\n", stderr="")
+        return RunResult(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("aidevkit.util.run", _mock_run)
+
+    result = runner.invoke(
+        app, ["bootstrap", "--no-ack", "App-Empire-LLC/DevKit#22"]
+    )
+    assert result.exit_code == E_EPIC_BRANCH_EXISTS, result.output
+    assert "already exist" in result.output
+    # Workspace directory must NOT have been created
+    assert not (workspaces / "DevKit-issue-22").exists()

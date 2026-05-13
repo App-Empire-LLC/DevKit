@@ -14,11 +14,13 @@ from pathlib import Path
 
 from . import __version__
 from . import config as _config
+from . import epic as _epic
 from . import projects as _projects
 from . import templates as _templates
 from . import workspace as _workspace
 from .util import (
     E_DEP_MISSING,
+    E_EPIC_BRANCH_EXISTS,
     E_ORIGIN_MAIN_UNAVAILABLE,
     E_REPO_NOT_FOUND,
     E_TEMPLATE_COLLISION,
@@ -174,6 +176,64 @@ def _format_ack_comment(workspace: Path, repos: list[_projects.CatalogEntry]) ->
     )
 
 
+def _format_epic_ack_comment(
+    node: _epic.EpicNode,
+    top_epic_url: str,
+    graph: _epic.EpicGraph,
+) -> str:
+    """Build per-issue ack comment for epic bootstrap (FR-010 / clarification Q1)."""
+    lines = [
+        f"Bootstrapped as part of epic {top_epic_url}.",
+        "",
+        "Branches created:",
+    ]
+    for er in node.effective_repos:
+        repo_part = er.split("/", 1)[-1] if "/" in er else er
+        lines.append(f"- {repo_part}: `{node.branch_name}`")
+
+    if node.parent and node.parent in graph.nodes:
+        parent_node = graph.nodes[node.parent]
+        siblings = [c for c in parent_node.children if c != node.ref]
+        if siblings:
+            lines.append("")
+            sibling_labels = [f"`{s}`" for s in siblings]
+            lines.append(f"Sibling issues: {', '.join(sibling_labels)}")
+
+    lines.append("")
+    lines.append("(Comment auto-posted by devkit bootstrap.)")
+    return "\n".join(lines)
+
+
+def _create_stacked_branches(
+    workspace: Path,
+    graph: _epic.EpicGraph,
+    catalog: _projects.Catalog,
+    projects_home: Path,
+) -> None:
+    """Create stacked branches for all non-top nodes using BFS (parents first)."""
+    queue = list(graph.nodes[graph.top_epic].children)
+    while queue:
+        ref = queue.pop(0)
+        node = graph.nodes[ref]
+        parent_node = graph.nodes[node.parent]  # type: ignore[index]
+        for er in node.effective_repos:
+            if not catalog.has_owner_repo(er):
+                continue
+            entry = catalog.resolve_owner_repo(er)
+            wt_path = workspace / entry.name
+            branch_res = git(
+                "branch", node.branch_name, parent_node.branch_name,
+                cwd=wt_path,
+            )
+            if branch_res.code != 0:
+                die(
+                    f"failed to create branch {node.branch_name!r} in {er}: "
+                    f"{branch_res.stderr.strip() or branch_res.stdout.strip()}",
+                    code=1,
+                )
+        queue.extend(node.children)
+
+
 def _config_sha_for(projects_home: Path) -> str:
     """Return git SHA of the projects-home `.devkit/` if tracked, else 'unversioned'."""
     devkit_dir = projects_home / ".devkit"
@@ -188,6 +248,8 @@ def cmd_bootstrap(
     repos_override: str = "",
     dry_run: bool = False,
     no_ack: bool = False,
+    no_epic: bool = False,
+    no_recursive: bool = False,
 ) -> int:
     _check_deps()
 
@@ -241,6 +303,45 @@ def cmd_bootstrap(
         issue_home = issue_home_entry.owner_repo
         _, repo = issue_home.split("/", 1)
 
+    # Phase 1c.5: epic detection (T015) ────────────────────────────────────
+    epic_graph: _epic.EpicGraph | None = None
+    if not no_epic:
+        try:
+            epic_graph = _epic.walk_graph(
+                owner, repo, num,
+                no_recursive=no_recursive,
+                issue_body=body,
+            )
+        except Exception as exc:
+            log(f"WARN: epic detection error ({exc}); proceeding as non-epic")
+            epic_graph = None
+        if epic_graph is None and not no_epic:
+            pass  # normal: non-epic issue
+
+    if epic_graph is not None:
+        info("Epic workspace detected.")
+        # T015b: validate ALL effective repos across the graph against PROJECTS.md
+        all_effective: set[str] = {
+            er
+            for node in epic_graph.nodes.values()
+            for er in node.effective_repos
+        }
+        for er in sorted(all_effective):
+            if not catalog.has_owner_repo(er):
+                die(
+                    f"epic graph contains repo {er!r} which is not in "
+                    f"{catalog_path}.\n"
+                    f"  Fix: add a row to PROJECTS.md for {er!r}.",
+                    code=E_REPO_NOT_FOUND,
+                )
+        # Expand repos to cover ALL effective repos (for worktree creation,
+        # source verification, and template stamping).
+        seen_or: set[str] = {e.owner_repo or e.name for e in repos}
+        for er in sorted(all_effective):
+            if er not in seen_or:
+                repos.append(catalog.resolve_owner_repo(er))
+                seen_or.add(er)
+
     # Phase 1d: verify source clones and origin/main
     _verify_source_repos(repos, projects_home)
     _validate_origin_main(repos, projects_home)
@@ -252,6 +353,28 @@ def cmd_bootstrap(
             f"workspace dir already exists: {workspace} (archive or remove it first)",
             code=E_WORKSPACE_EXISTS,
         )
+
+    # T016: branch collision detection for epic path (FR-029)
+    if epic_graph is not None:
+        conflicts: list[str] = []
+        for node in epic_graph.nodes.values():
+            for er in node.effective_repos:
+                if not catalog.has_owner_repo(er):
+                    continue
+                entry = catalog.resolve_owner_repo(er)
+                src = projects_home / entry.name
+                chk = git(
+                    "rev-parse", "--verify", f"refs/heads/{node.branch_name}",
+                    cwd=src,
+                )
+                if chk.code == 0:
+                    conflicts.append(f"  {er}: {node.branch_name}")
+        if conflicts:
+            die(
+                "epic branch(es) already exist — archive the workspace or "
+                "delete these branches first:\n" + "\n".join(conflicts),
+                code=E_EPIC_BRANCH_EXISTS,
+            )
 
     # Phase 1f: plan template stamping (validation phase — no mutation)
     home_dir = Path.home()
@@ -299,8 +422,13 @@ def cmd_bootstrap(
 
     if dry_run:
         info("")
-        info("[dry-run] would create workspace dir, git init, stamp reserved + "
-             "template files, add worktrees, post ack comment")
+        if epic_graph is not None:
+            info("[dry-run] would create epic workspace: worktrees for all "
+                 "effective repos, stacked branches, EPIC.md, WORKSPACE.md "
+                 "(is_epic=true), per-issue ack comments")
+        else:
+            info("[dry-run] would create workspace dir, git init, stamp reserved + "
+                 "template files, add worktrees, post ack comment")
         return 0
 
     # Phase 2a: mkdir workspace + git init (preserved per spec Assumptions —
@@ -329,6 +457,8 @@ def cmd_bootstrap(
             stamp_devkit_version=__version__,
             stamp_config_sha=config_sha,
             template_stamp_sha=plan.template_stamp_sha,
+            is_epic=epic_graph is not None,
+            epic_top_issue=epic_graph.top_epic if epic_graph is not None else None,
         )
         _workspace.stamp_trunk_md(workspace, trunk_branch)
         _workspace.stamp_projects_md(workspace, catalog.raw_text)
@@ -369,22 +499,44 @@ def cmd_bootstrap(
             affected_repo_names=affected_repo_names,
             phase="worktree",
         )
+
+        # Phase 2f (epic only): stacked branches + EPIC.md ─────────────────
+        if epic_graph is not None:
+            # T017: create stacked branches for all non-top nodes (BFS, parents first)
+            _create_stacked_branches(workspace, epic_graph, catalog, projects_home)
+            # T018: write EPIC.md
+            _epic.write_epic_md(workspace, epic_graph, title=title)
     except Exception:
         shutil.rmtree(workspace, ignore_errors=True)
         raise
 
-    # Phase 2e: ack comment
+    # Phase 2g: ack comments
     if not no_ack:
-        comment = _format_ack_comment(workspace, repos)
-        ack_res = gh(
-            "issue", "comment", str(num),
-            "--repo", issue_home,
-            "--body", comment,
-        )
-        if ack_res.code == 0:
-            info(f"Posted ack comment on {issue_home}#{num}")
+        if epic_graph is not None:
+            # T020: post one ack comment per node in the epic graph
+            for node_ref, node in epic_graph.nodes.items():
+                node_owner_repo, node_num_str = node_ref.rsplit("#", 1)
+                comment = _format_epic_ack_comment(node, url, epic_graph)
+                ack_res = gh(
+                    "issue", "comment", node_num_str,
+                    "--repo", node_owner_repo,
+                    "--body", comment,
+                )
+                if ack_res.code == 0:
+                    info(f"Posted ack comment on {node_ref}")
+                else:
+                    log(f"WARN: failed to post ack comment on {node_ref} (continuing)")
         else:
-            log("WARN: failed to post ack comment (continuing)")
+            comment = _format_ack_comment(workspace, repos)
+            ack_res = gh(
+                "issue", "comment", str(num),
+                "--repo", issue_home,
+                "--body", comment,
+            )
+            if ack_res.code == 0:
+                info(f"Posted ack comment on {issue_home}#{num}")
+            else:
+                log("WARN: failed to post ack comment (continuing)")
 
     primary = workspace / repo
     info("")

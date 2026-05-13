@@ -11,11 +11,14 @@ from . import bootstrap as _bootstrap
 from . import check_update as _check_update
 from . import config as _config
 from . import doctor as _doctor
+from . import pr_create as _pr_create
 from . import preflight as _preflight
 from . import purge as _purge
 from . import review_issue as _review_issue
 from . import setup as _setup
 from . import status as _status
+from . import sub_checkout as _sub_checkout
+from . import sub_merge as _sub_merge
 from . import sync as _sync
 from . import uninstall as _uninstall
 from . import update as _update
@@ -102,6 +105,16 @@ def bootstrap(
         "--no-ack",
         help="Skip posting the acknowledgement comment on the issue.",
     ),
+    no_epic: bool = typer.Option(
+        False,
+        "--no-epic",
+        help="Skip epic detection; treat the issue as a regular non-epic workspace.",
+    ),
+    no_recursive: bool = typer.Option(
+        False,
+        "--no-recursive",
+        help="When bootstrapping an epic, only include direct children (not nested epics).",
+    ),
 ) -> None:
     issue_arg = _expand_bare_ref(issue_arg)
     repos = _expand_repos_csv(repos)
@@ -110,6 +123,8 @@ def bootstrap(
         repos_override=repos,
         dry_run=dry_run,
         no_ack=no_ack,
+        no_epic=no_epic,
+        no_recursive=no_recursive,
     )
     raise typer.Exit(code=code)
 
@@ -183,6 +198,50 @@ def status(
     ),
 ) -> None:
     code = _status.cmd_status(json_output=json)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "pr-create",
+    help="Open PRs for the current sub-issue in an epic workspace with correct base branches.",
+)
+def pr_create(
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="Print planned actions without creating PRs.",
+    ),
+) -> None:
+    code = _pr_create.cmd_pr_create(dry_run=dry_run)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "sub-merge",
+    help="Verify PRs merged for the current sub-issue, advance epic pointer, cascade-up.",
+)
+def sub_merge(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="N or OWNER/REPO#N",
+        help="Sub-issue to mark merged: bare number, #N, or owner/repo#N.",
+    ),
+) -> None:
+    code = _sub_merge.cmd_sub_merge(issue_arg=issue_arg)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "sub-checkout",
+    help="Switch all worktrees in an epic workspace to a sub-issue's branch.",
+)
+def sub_checkout(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="N or OWNER/REPO#N",
+        help="Sub-issue to check out: bare number (7), #7, or owner/repo#7.",
+    ),
+) -> None:
+    code = _sub_checkout.cmd_sub_checkout(issue_arg=issue_arg)
     raise typer.Exit(code=code)
 
 
