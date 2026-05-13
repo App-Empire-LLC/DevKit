@@ -102,6 +102,16 @@ def bootstrap(
         "--no-ack",
         help="Skip posting the acknowledgement comment on the issue.",
     ),
+    no_epic: bool = typer.Option(
+        False,
+        "--no-epic",
+        help="Skip epic detection; treat the issue as a regular non-epic workspace.",
+    ),
+    no_recursive: bool = typer.Option(
+        False,
+        "--no-recursive",
+        help="When bootstrapping an epic, only include direct children (not nested epics).",
+    ),
 ) -> None:
     issue_arg = _expand_bare_ref(issue_arg)
     repos = _expand_repos_csv(repos)
@@ -110,6 +120,8 @@ def bootstrap(
         repos_override=repos,
         dry_run=dry_run,
         no_ack=no_ack,
+        no_epic=no_epic,
+        no_recursive=no_recursive,
     )
     raise typer.Exit(code=code)
 

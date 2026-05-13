@@ -29,6 +29,8 @@ def stamp_workspace_md(
     stamp_config_sha: str,
     template_stamp_sha: str,
     stamp_date: str | None = None,
+    is_epic: bool = False,
+    epic_top_issue: str | None = None,
 ) -> None:
     """Write ``<workspace>/WORKSPACE.md`` with the stamped frontmatter."""
     if stamp_date is None:
@@ -47,6 +49,9 @@ def stamp_workspace_md(
         "template_stamp_sha": template_stamp_sha,
         "status": "active",
     }
+    if is_epic:
+        frontmatter["is_epic"] = True
+        frontmatter["epic_top_issue"] = epic_top_issue
 
     body = (
         "---\n"
