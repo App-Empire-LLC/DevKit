@@ -14,11 +14,7 @@ from typing import Literal
 
 import yaml
 
-from .util import (
-    E_EPIC_GRAPH_INVALID,
-    die,
-    gh,
-)
+from .util import gh
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -268,7 +264,6 @@ def walk_graph(
         child_children_refs: list[str] = []
         if child_sub and not no_recursive:
             # Recurse into grandchildren
-            grandchild_raw_map: dict[str, dict] = {}
             for gsub in child_sub:
                 g_html = gsub.get("html_url", "")
                 g_or = _owner_repo_from_url(g_html)
@@ -443,5 +438,6 @@ def write_epic_md(workspace: Path, graph: EpicGraph, title: str = "") -> None:
     """Write EPIC.md with YAML frontmatter and regenerated markdown body."""
     fm = _graph_to_frontmatter(graph)
     body = _regenerate_body(graph, title)
-    content = "---\n" + yaml.safe_dump(fm, sort_keys=False, default_flow_style=False) + "---\n\n" + body
+    fm_text = yaml.safe_dump(fm, sort_keys=False, default_flow_style=False)
+    content = "---\n" + fm_text + "---\n\n" + body
     (workspace / "EPIC.md").write_text(content)

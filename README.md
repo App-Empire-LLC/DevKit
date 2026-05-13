@@ -63,7 +63,10 @@ Runs `devkit doctor` first, then symlinks `~/.claude/commands/devkit.*.md` → t
 
 | Command                             | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
-| `devkit bootstrap <owner/repo#N>`   | create a per-issue workspace directory                  |
+| `devkit bootstrap <owner/repo#N>`   | create a per-issue workspace directory (epic-aware)     |
+| `devkit sub-checkout <N>`           | switch worktrees to a sub-issue's branch (epic only)    |
+| `devkit pr-create [--dry-run]`      | open PRs for current sub-issue with correct base branches (epic only) |
+| `devkit sub-merge <N>`              | mark sub-issue merged, advance pointer, cascade-up (epic only) |
 | `devkit sync`                       | fetch and rebase every worktree in the current workspace onto its trunk |
 | `devkit status [--json]`            | summarize every active per-issue workspace (issue state, branches, PRs) |
 | `devkit add-repo <name>`            | add a sibling repo's worktree to the current per-issue workspace |
@@ -190,6 +193,66 @@ workspace root to apply to every worktree without its own `TRUNK.md`.
 # Use develop instead of main for this worktree — see ADR-042.
 develop
 ```
+
+## Working with Epics
+
+When a GitHub issue has sub-issues, `devkit bootstrap` automatically creates a single workspace with stacked branches and an `EPIC.md` tracking the full graph.
+
+### Quickstart
+
+```bash
+# 1. Bootstrap the top-level epic
+devkit bootstrap App-Empire-LLC/DevKit#42
+
+# 2. Start a Claude session inside the workspace
+cd ~/.app_empire_worktrees/DevKit-issue-42 && claude
+
+# 3. Check out the first sub-issue (must be current_issue)
+devkit sub-checkout 7
+
+# 4. Do your work, commit, then open PRs with correct base branches
+devkit pr-create
+
+# 5. After PRs are merged on GitHub, advance the epic
+devkit sub-merge 7
+
+# 6. Repeat steps 3-5 for each sub-issue
+# ...
+
+# 7. Archive when all nodes are merged
+devkit archive App-Empire-LLC/DevKit#42
+```
+
+**Bootstrap flags**:
+- `--no-epic` — skip epic detection, treat as regular workspace
+- `--no-recursive` — only include direct children (skip nested epics)
+
+### Serial enforcement
+
+`devkit sub-checkout N` only succeeds when `N == current_issue`. To work out-of-order, manually edit `current_issue` in `EPIC.md`.
+
+### Cascade-up
+
+When all children of a parent epic are merged via `devkit sub-merge`, PRs for the parent are automatically opened and its status is set to `in_review`. The parent must then be explicitly `devkit sub-merge`d after its own PRs are merged.
+
+### Manual rebase recipe
+
+Until `devkit epic-sync` ships ([DevKit#47](https://github.com/App-Empire-LLC/DevKit/issues/47)), use this when `origin/main` advances:
+
+```bash
+# From inside the affected worktree, for each repo:
+git fetch origin
+git checkout issue-<repo>-<top_N>
+git rebase origin/main
+git checkout issue-<repo>-<sub_N>
+git rebase issue-<repo>-<top_N>
+git checkout issue-<repo>-<current_N>
+git rebase issue-<repo>-<sub_N>
+```
+
+See [docs/epic-workspaces.md](docs/epic-workspaces.md) for the full design reference.
+
+---
 
 ## Conventions
 
