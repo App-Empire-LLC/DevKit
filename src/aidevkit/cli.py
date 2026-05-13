@@ -8,6 +8,7 @@ from . import __version__
 from . import add_repo as _add_repo
 from . import archive as _archive
 from . import bootstrap as _bootstrap
+from . import sub_checkout as _sub_checkout
 from . import check_update as _check_update
 from . import config as _config
 from . import doctor as _doctor
@@ -195,6 +196,21 @@ def status(
     ),
 ) -> None:
     code = _status.cmd_status(json_output=json)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "sub-checkout",
+    help="Switch all worktrees in an epic workspace to a sub-issue's branch.",
+)
+def sub_checkout(
+    issue_arg: str = typer.Argument(
+        ...,
+        metavar="N or OWNER/REPO#N",
+        help="Sub-issue to check out: bare number (7), #7, or owner/repo#7.",
+    ),
+) -> None:
+    code = _sub_checkout.cmd_sub_checkout(issue_arg=issue_arg)
     raise typer.Exit(code=code)
 
 
