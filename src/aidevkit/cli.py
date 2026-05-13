@@ -8,6 +8,7 @@ from . import __version__
 from . import add_repo as _add_repo
 from . import archive as _archive
 from . import bootstrap as _bootstrap
+from . import pr_create as _pr_create
 from . import sub_checkout as _sub_checkout
 from . import check_update as _check_update
 from . import config as _config
@@ -196,6 +197,20 @@ def status(
     ),
 ) -> None:
     code = _status.cmd_status(json_output=json)
+    raise typer.Exit(code=code)
+
+
+@app.command(
+    "pr-create",
+    help="Open PRs for the current sub-issue in an epic workspace with correct base branches.",
+)
+def pr_create(
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="Print planned actions without creating PRs.",
+    ),
+) -> None:
+    code = _pr_create.cmd_pr_create(dry_run=dry_run)
     raise typer.Exit(code=code)
 
 
