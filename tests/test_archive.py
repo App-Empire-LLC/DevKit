@@ -662,3 +662,104 @@ def test_mv_failure_leaves_partial_state_no_rollback(
     assert len(posted_comments) >= 1
     # Workspace still exists (mv failed, no re-move attempted).
     assert workspace.exists()
+
+
+
+
+# ── T051: Epic-aware archive ──────────────────────────────────────────────────
+
+from aidevkit.epic import EpicGraph, EpicNode, write_epic_md as _write_epic_md
+from aidevkit.util import E_PRS_NOT_MERGED
+
+
+def _make_epic_workspace(workspace: Path, all_merged: bool = True) -> None:
+    top = "org/repo#1"
+    c7 = "org/repo#7"
+    nodes = {
+        c7: EpicNode(ref=c7, type="issue", own_repos=["org/repo"],
+                     effective_repos=["org/repo"], branch_name="issue-repo-7",
+                     parent=top, children=[],
+                     status="merged" if all_merged else "in_progress"),
+        top: EpicNode(ref=top, type="epic", own_repos=["org/repo"],
+                      effective_repos=["org/repo"], branch_name="issue-repo-1",
+                      parent=None, children=[c7],
+                      status="merged" if all_merged else "in_progress"),
+    }
+    graph = EpicGraph(top_epic=top, current_issue=top if all_merged else c7,
+                      execution_order=[c7], nodes=nodes)
+    _write_epic_md(workspace, graph)
+
+
+def test_epic_archive_all_merged_proceeds(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """T051: all nodes merged → archive proceeds; no 'not yet merged' error."""
+    workspace, _ = _make_workspace(tmp_path, "DevKit", 4)
+    worktrees_home = tmp_path / "worktrees"
+    _make_epic_workspace(workspace, all_merged=True)
+
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    subprocess_capture.set_default(RunResult(code=0, stdout='{"state":"CLOSED"}', stderr=""))
+
+    result = runner.invoke(app, ["archive", "--force", "App-Empire-LLC/DevKit#4"])
+    assert "not yet merged" not in result.output
+
+
+def test_epic_archive_unmerged_node_blocked(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """T051: unmerged node → E_PRS_NOT_MERGED before any filesystem mutation."""
+    workspace, _ = _make_workspace(tmp_path, "DevKit", 4)
+    worktrees_home = tmp_path / "worktrees"
+    _make_epic_workspace(workspace, all_merged=False)
+
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    subprocess_capture.set_default(RunResult(code=0, stdout="", stderr=""))
+
+    result = runner.invoke(app, ["archive", "App-Empire-LLC/DevKit#4"])
+    assert result.exit_code == E_PRS_NOT_MERGED, result.output
+    assert "not yet merged" in result.output
+    assert workspace.exists()  # no move occurred
+
+
+def test_epic_archive_force_overrides_unmerged(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """T051: --force proceeds despite unmerged nodes; WARN is logged."""
+    workspace, _ = _make_workspace(tmp_path, "DevKit", 4)
+    worktrees_home = tmp_path / "worktrees"
+    _make_epic_workspace(workspace, all_merged=False)
+
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    subprocess_capture.set_default(RunResult(code=0, stdout='{"state":"CLOSED"}', stderr=""))
+
+    result = runner.invoke(app, ["archive", "--force", "App-Empire-LLC/DevKit#4"])
+    assert result.exit_code != E_PRS_NOT_MERGED
+    assert "WARN" in result.output
+
+
+def test_non_epic_workspace_archive_unchanged(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """T051: workspace without EPIC.md → archive unaffected by epic check."""
+    workspace, _ = _make_workspace(tmp_path, "DevKit", 4)
+    worktrees_home = tmp_path / "worktrees"
+    # No EPIC.md written
+
+    monkeypatch.setenv("APP_EMPIRE_WORKTREES_HOME", str(worktrees_home))
+    subprocess_capture.set_default(RunResult(code=0, stdout="", stderr=""))
+
+    result = runner.invoke(app, ["archive", "--force", "App-Empire-LLC/DevKit#4"])
+    assert "Epic nodes" not in result.output
