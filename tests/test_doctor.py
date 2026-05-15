@@ -173,6 +173,85 @@ def test_doctor_no_longer_checks_app_empire_envs(
     assert "APP_EMPIRE" not in result.output
 
 
+def test_doctor_reports_missing_slash_command_prompt(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """A registered CLI command without a matching prompt must fail the doctor."""
+    _seed_devkit(tmp_path, monkeypatch)
+    monkeypatch.setattr("aidevkit.doctor.shutil.which", _all_present_which(tmp_path))
+    subprocess_capture.set_default(
+        RunResult(code=0, stdout="", stderr="Logged in to github.com as test-user")
+    )
+
+    from aidevkit import doctor as doctor_module
+
+    real_prompts = doctor_module._bundled_slash_prompt_names()
+    # Drop one real prompt name so the registered CLI command of the same
+    # name is reported as missing — proves the failure surfaces, not just
+    # that the function runs.
+    monkeypatch.setattr(
+        doctor_module,
+        "_bundled_slash_prompt_names",
+        lambda: real_prompts - {"bootstrap"},
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code != 0, result.output
+    assert "[FAIL]" in result.output
+    assert "slash-command parity" in result.output
+    assert "bootstrap" in result.output
+
+
+def test_doctor_reports_orphan_slash_command_prompt(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    subprocess_capture,
+) -> None:
+    """A prompt with no matching CLI command must also fail the doctor."""
+    _seed_devkit(tmp_path, monkeypatch)
+    monkeypatch.setattr("aidevkit.doctor.shutil.which", _all_present_which(tmp_path))
+    subprocess_capture.set_default(
+        RunResult(code=0, stdout="", stderr="Logged in to github.com as test-user")
+    )
+
+    from aidevkit import doctor as doctor_module
+
+    real_prompts = doctor_module._bundled_slash_prompt_names()
+    monkeypatch.setattr(
+        doctor_module,
+        "_bundled_slash_prompt_names",
+        lambda: real_prompts | {"phantom-command"},
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code != 0, result.output
+    assert "[FAIL]" in result.output
+    assert "slash-command parity" in result.output
+    assert "phantom-command" in result.output
+
+
+def test_slash_command_parity_excludes_lifecycle_commands() -> None:
+    """Unit-level: lifecycle commands must not be required to have prompts."""
+    from aidevkit.doctor import (
+        _NO_PROMPT_COMMANDS,
+        _registered_cli_command_names,
+    )
+
+    cli = _registered_cli_command_names()
+    # Every excluded name must actually be a registered CLI command — if one
+    # is removed from cli.py, the allow-list should be pruned to match.
+    stale_exclusions = _NO_PROMPT_COMMANDS - cli
+    assert not stale_exclusions, (
+        f"_NO_PROMPT_COMMANDS contains names not in the CLI: {stale_exclusions}"
+    )
+
+
 def test_doctor_reports_gh_not_authed(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,

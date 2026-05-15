@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from importlib.resources import files
 
 import typer
 
@@ -9,6 +10,18 @@ from . import projects as _projects
 from .util import E_DEP_MISSING, err, gh, out
 
 _LABEL_WIDTH = 28
+
+# Top-level CLI commands that intentionally have no slash-command counterpart.
+# These are install / lifecycle / introspection commands meant to be run from
+# the shell, not from a Claude Code session.
+_NO_PROMPT_COMMANDS: frozenset[str] = frozenset({
+    "doctor",
+    "setup",
+    "uninstall",
+    "update",
+    "check-update",
+    "version",
+})
 
 
 def _ok(label: str, value: str) -> None:
@@ -83,6 +96,70 @@ def _check_devkit_setup() -> bool:
     return True
 
 
+def _registered_cli_command_names() -> set[str]:
+    """Top-level CLI command names as they appear in `devkit --help`.
+
+    Uses Typer's Click bridge so hyphenation is already applied (underscore-
+    named callbacks like `pr_create` resolve to `pr-create`). Imported lazily
+    to avoid a cli ↔ doctor import cycle.
+    """
+    from typer.main import get_group
+
+    from .cli import app
+
+    return set(get_group(app).commands.keys())
+
+
+def _bundled_slash_prompt_names() -> set[str]:
+    """Slash-command base-names shipped under aidevkit/commands/.
+
+    `devkit.<name>.md` → `<name>`. Anything that doesn't match this pattern
+    is ignored — the package directory ships only `devkit.*.md` today, but
+    the prefix check guards against future stray files.
+    """
+    pkg = files("aidevkit.commands")
+    names: set[str] = set()
+    for entry in pkg.iterdir():
+        n = entry.name
+        if n.startswith("devkit.") and n.endswith(".md"):
+            names.add(n[len("devkit.") : -len(".md")])
+    return names
+
+
+def _check_slash_command_parity() -> bool:
+    """Verify every user-facing CLI command has a matching slash-command prompt.
+
+    Catches the failure mode where a PR adds a Typer command but forgets the
+    corresponding `src/aidevkit/commands/devkit.<name>.md` — the symptom is
+    a CLI that works but a `devkit setup` that silently links fewer prompts
+    than there are commands.
+    """
+    cli_names = _registered_cli_command_names() - _NO_PROMPT_COMMANDS
+    prompt_names = _bundled_slash_prompt_names()
+    missing = sorted(cli_names - prompt_names)
+    orphan = sorted(prompt_names - cli_names)
+
+    if not missing and not orphan:
+        _ok(
+            "slash-command parity",
+            f"{len(prompt_names)} prompt(s) match registered CLI commands",
+        )
+        return True
+
+    if missing:
+        _fail(
+            "slash-command parity",
+            "CLI command(s) without prompt under src/aidevkit/commands/: "
+            + ", ".join(missing),
+        )
+    if orphan:
+        _fail(
+            "slash-command parity",
+            "prompt(s) without matching CLI command: " + ", ".join(orphan),
+        )
+    return False
+
+
 def cmd_doctor() -> int:
     out.print("[devkit] DevKit doctor — checking dependencies and environment")
 
@@ -92,6 +169,7 @@ def cmd_doctor() -> int:
 
     results.append(_check_devkit_setup())
     results.append(_check_gh_auth())
+    results.append(_check_slash_command_parity())
 
     failed = sum(1 for ok in results if not ok)
     if failed:
